@@ -55,9 +55,31 @@ export const AGENTLY_ABI = [
   "event Spent(uint256 index, address to, uint256 amount, string reason)",
 ];
 
+/**
+ * Read provider against the public Arc RPC. CORS is open on rpc.mainnet.arc.io,
+ * so this works in any browser — no wallet extension required. Reads must NEVER
+ * go through window.ethereum, or the dashboard looks empty to anyone who hasn't
+ * installed MetaMask.
+ */
+export function getReadProvider() {
+  return new ethers.JsonRpcProvider(ARC_RPC);
+}
+
 export function getReadContract(address: string) {
-  const provider = new ethers.JsonRpcProvider(ARC_RPC);
-  return new ethers.Contract(address, AGENTLY_ABI, provider);
+  return new ethers.Contract(address, AGENTLY_ABI, getReadProvider());
+}
+
+export function explorerTx(hash: string): string {
+  return `${ARC_EXPLORER}/tx/${hash}`;
+}
+
+export function explorerAddr(addr: string): string {
+  return `${ARC_EXPLORER}/address/${addr}`;
+}
+
+/** formatEther of a sub-unit USDC amount, to 4 significant decimals. */
+export function fmt(v: bigint): string {
+  return Number(ethers.formatEther(v)).toFixed(4).replace(/\.?0+$/, "");
 }
 
 export function short(addr: string | undefined | null): string {
