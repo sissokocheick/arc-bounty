@@ -12,6 +12,23 @@ that an AI agent can actually be trusted with.
 
 Built for the **Circle Arc Microgrants** hackathon on DoraHacks.
 
+## Live on Arc mainnet
+
+Dashboard: **https://arc-bounty-beige.vercel.app** — renders live mainnet data
+in any browser; no wallet needed to read, only to write.
+
+| Contract      | Address |
+| ------------- | ------- |
+| TaskBoard     | [`0xD956a7B9a5B1a4Dca32eE338b5CA24e186b34dB0`](https://explorer.arc.io/address/0xD956a7B9a5B1a4Dca32eE338b5CA24e186b34dB0) |
+| AgentVault   | [`0xEeBD144eeCc4bfa9085bb68F24aF7472DDEA3dDD`](https://explorer.arc.io/address/0xEeBD144eeCc4bfa9085bb68F24aF7472DDEA3dDD) |
+| AgentRegistry | [`0xcF5d6EEDD31bF38F4A7C0601B71bBbB1F7CCa447`](https://explorer.arc.io/address/0xcF5d6EEDD31bF38F4A7C0601B71bBbB1F7CCa447) |
+
+The chain currently holds: one agent (`ARC-1`) registered with a funded vault
+under a spending policy (0.005 cap / 0.05 per day / whitelist on), two open
+escrowed tasks at 0.005 USDC each, one task completed and paid out, and one
+autonomous policy-bounded spend of 0.002 USDC with an on-chain reason. Every
+number on the dashboard is read from these contracts at load time.
+
 ## What's here
 
 ```
