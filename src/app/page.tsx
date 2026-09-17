@@ -1,0 +1,797 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { ethers } from "ethers";
+import Header from "@/components/Header";
+import {
+  AGENTLY_ABI,
+  ARC_CHAIN_ID,
+  short,
+} from "@/utils/contract";
+
+const BOARD = process.env.NEXT_PUBLIC_TASK_BOARD_ADDRESS || "";
+const VAULT = process.env.NEXT_PUBLIC_AGENT_VAULT_ADDRESS || "";
+const REGISTRY = process.env.NEXT_PUBLIC_AGENT_REGISTRY_ADDRESS || "";
+
+type Task = {
+  id: bigint;
+  creator: string;
+  title: string;
+  description: string;
+  reward: bigint;
+  freelancer: string;
+  proofUrl: string;
+  submitted: boolean;
+  completed: boolean;
+  cancelled: boolean;
+  deadline: bigint;
+};
+
+const TABS = ["Tasks", "Agent vault", "Agents"] as const;
+type Tab = (typeof TABS)[number];
+
+export default function Home() {
+  const [tab, setTab] = useState<Tab>("Tasks");
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [account, setAccount] = useState("");
+  const [proofFor, setProofFor] = useState<string>("");
+
+  const needConfig = !BOARD;
+
+  const read = useCallback(async () => {
+    if (!BOARD) return;
+    const provider = new ethers.BrowserProvider(window.ethereum!);
+    const c = new ethers.Contract(BOARD, AGENTLY_ABI, provider);
+    const all = (await c.getAllTasks()) as Task[];
+    setTasks([...all].reverse());
+  }, []);
+
+  const refresh = useCallback(async () => {
+    try {
+      setLoading(true);
+      await read();
+    } finally {
+      setLoading(false);
+    }
+  }, [read]);
+
+  useEffect(() => {
+    (async () => {
+      if (!window.ethereum) return;
+      const provider = new ethers.BrowserProvider(window.ethereum!);
+      const network = await provider.getNetwork();
+      if (Number(network.chainId) !== ARC_CHAIN_ID) return;
+      const accs = await provider.listAccounts();
+      if (accs.length) setAccount(accs[0].address);
+      read();
+    })();
+  }, [read]);
+
+  async function getSigner() {
+    const provider = new ethers.BrowserProvider(window.ethereum!);
+    return await provider.getSigner();
+  }
+
+  async function tx(fn: () => Promise<ethers.TransactionResponse>, ok: string) {
+    try {
+      setLoading(true);
+      const t = await fn();
+      await t.wait();
+      alert(ok);
+      await refresh();
+    } catch (e: any) {
+      alert("Transaction failed: " + (e?.reason || e?.message || "unknown"));
+    } finally {
+      setLoading(false);
+      setProofFor("");
+    }
+  }
+
+  async function createTask(e: React.FormEvent) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget as HTMLFormElement);
+    const signer = await getSigner();
+    const c = new ethers.Contract(BOARD, AGENTLY_ABI, signer);
+    const value = ethers.parseEther(String(form.get("reward")));
+    const days = Number(form.get("days") || 0);
+    const deadline = days
+      ? BigInt(Math.floor(Date.now() / 1000) + days * 86400)
+      : 0n;
+    await tx(
+      () =>
+        c.postTask(
+          String(form.get("title")),
+          String(form.get("description")),
+          deadline,
+          { value }
+        ),
+      "Task posted and reward escrowed in USDC"
+    );
+  }
+
+  async function submitWork(id: bigint) {
+    const url = window.prompt("Proof URL (GitHub PR, Figma link, agent output):");
+    if (!url) return;
+    const signer = await getSigner();
+    const c = new ethers.Contract(BOARD, AGENTLY_ABI, signer);
+    await tx(() => c.submitWork(id, url), "Work submitted for review");
+  }
+
+  async function approve(id: bigint) {
+    const signer = await getSigner();
+    const c = new ethers.Contract(BOARD, AGENTLY_ABI, signer);
+    await tx(() => c.approveWork(id), "Approved — USDC paid out instantly");
+  }
+
+  async function reject(id: bigint) {
+    const signer = await getSigner();
+    const c = new ethers.Contract(BOARD, AGENTLY_ABI, signer);
+    await tx(() => c.rejectWork(id), "Submission rejected — task reopened");
+  }
+
+  async function cancel(id: bigint) {
+    const signer = await getSigner();
+    const c = new ethers.Contract(BOARD, AGENTLY_ABI, signer);
+    await tx(() => c.cancelTask(id), "Task cancelled — reward refunded");
+  }
+
+  if (needConfig) {
+    return (
+      <>
+        <Header />
+        <main className="max-w-6xl mx-auto px-4 py-20 text-center">
+          <h1 className="text-3xl font-bold text-slate-900 mb-4">Agently</h1>
+          <p className="text-slate-600 max-w-xl mx-auto">
+            An autonomous-agent economy where AI agents escrow, earn and spend
+            native USDC on Arc — with policy-governed wallets that keep them on
+            a leash.
+          </p>
+          <div className="mt-10 max-w-lg mx-auto rounded-xl border border-amber-300 bg-amber-50 p-6 text-left">
+            <p className="font-semibold text-amber-800 mb-2">
+              Contracts not deployed yet
+            </p>
+            <p className="text-sm text-amber-700">
+              Deploy the suite and set these environment variables:
+            </p>
+            <ul className="mt-3 text-sm font-mono text-amber-900 space-y-1">
+              <li>NEXT_PUBLIC_TASK_BOARD_ADDRESS</li>
+              <li>NEXT_PUBLIC_AGENT_VAULT_ADDRESS</li>
+              <li>NEXT_PUBLIC_AGENT_REGISTRY_ADDRESS</li>
+            </ul>
+            <p className="mt-4 text-xs text-amber-700">
+              See <code>hardhat/README.md</code> for the one-command deploy.
+            </p>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Header />
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">
+              The agent economy, settled in USDC
+            </h1>
+            <p className="text-slate-500 text-sm mt-1">
+              Post micro-tasks, let autonomous agents compete for them, and pay
+              out instantly in Arc's native stablecoin.
+            </p>
+          </div>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="text-sm px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {loading ? "Syncing…" : "Refresh"}
+          </button>
+        </div>
+
+        <div className="flex gap-2 mb-6 border-b border-slate-200">
+          {TABS.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                tab === t
+                  ? "border-emerald-600 text-emerald-700"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {tab === "Tasks" && (
+          <TasksTab
+            tasks={tasks}
+            account={account}
+            loading={loading}
+            onSubmit={submitWork}
+            onApprove={approve}
+            onReject={reject}
+            onCancel={cancel}
+            onCreate={createTask}
+            proofFor={proofFor}
+            setProofFor={setProofFor}
+          />
+        )}
+        {tab === "Agent vault" && <VaultTab />}
+        {tab === "Agents" && <AgentsTab />}
+      </main>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ Tasks */
+
+function TasksTab(props: {
+  tasks: Task[];
+  account: string;
+  loading: boolean;
+  onSubmit: (id: bigint) => void;
+  onApprove: (id: bigint) => void;
+  onReject: (id: bigint) => void;
+  onCancel: (id: bigint) => void;
+  onCreate: (e: React.FormEvent) => void;
+  proofFor: string;
+  setProofFor: (s: string) => void;
+}) {
+  const { tasks, account } = props;
+  const open = tasks.filter((t) => !t.completed && !t.cancelled);
+
+  return (
+    <div className="grid lg:grid-cols-[1fr_360px] gap-8">
+      <section>
+        <h2 className="text-sm font-semibold text-slate-700 mb-3">
+          {open.length} open task{open.length === 1 ? "" : "s"}
+        </h2>
+        {open.length === 0 && (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-slate-500 text-sm">
+            No open tasks. Post one and watch agents compete for it.
+          </div>
+        )}
+        <div className="space-y-3">
+          {open.map((t) => {
+            const mine = t.creator.toLowerCase() === account.toLowerCase();
+            return (
+              <article
+                key={t.id.toString()}
+                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-slate-900">{t.title}</h3>
+                    <p className="text-sm text-slate-600 mt-1 line-clamp-2">
+                      {t.description}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700">
+                    {Number(ethers.formatEther(t.reward)).toFixed(2)} USDC
+                  </span>
+                </div>
+
+                <div className="mt-4 flex items-center gap-3 text-xs text-slate-500">
+                  <span>creator {short(t.creator)}</span>
+                  {t.deadline > 0n && (
+                    <span>
+                      closes{" "}
+                      {new Date(Number(t.deadline) * 1000).toLocaleDateString()}
+                    </span>
+                  )}
+                  {t.submitted && (
+                    <span className="text-blue-600">
+                      proof pending review by {short(t.freelancer)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {mine && t.submitted && (
+                    <>
+                      <button
+                        onClick={() => props.onApprove(t.id)}
+                        disabled={props.loading}
+                        className="text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        Approve &amp; pay
+                      </button>
+                      <button
+                        onClick={() => props.onReject(t.id)}
+                        disabled={props.loading}
+                        className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Reject &amp; reopen
+                      </button>
+                    </>
+                  )}
+                  {mine && !t.submitted && (
+                    <button
+                      onClick={() => props.onCancel(t.id)}
+                      disabled={props.loading}
+                      className="text-sm font-medium px-3 py-1.5 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                    >
+                      Cancel &amp; refund
+                    </button>
+                  )}
+                  {!mine && !t.submitted && (
+                    <button
+                      onClick={() => props.onSubmit(t.id)}
+                      disabled={props.loading}
+                      className="text-sm font-medium px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50"
+                    >
+                      Submit work
+                    </button>
+                  )}
+                  {!mine && t.submitted && (
+                    <span className="text-xs text-slate-400">
+                      under review
+                    </span>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <h2 className="text-sm font-semibold text-slate-700 mt-8 mb-3">
+          Recently settled
+        </h2>
+        <div className="space-y-3">
+          {tasks
+            .filter((t) => t.completed || t.cancelled)
+            .slice(0, 5)
+            .map((t) => (
+              <div
+                key={t.id.toString()}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-3 flex items-center justify-between text-sm"
+              >
+                <span className="text-slate-700 truncate">{t.title}</span>
+                <span
+                  className={
+                    t.completed
+                      ? "text-emerald-600 font-medium"
+                      : "text-slate-400 font-medium"
+                  }
+                >
+                  {t.completed ? "paid" : "refunded"}
+                </span>
+              </div>
+            ))}
+          {tasks.filter((t) => t.completed || t.cancelled).length === 0 && (
+            <p className="text-sm text-slate-400">Nothing settled yet.</p>
+          )}
+        </div>
+      </section>
+
+      <aside>
+        <form
+          onSubmit={props.onCreate}
+          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4"
+        >
+          <h2 className="font-semibold text-slate-900">Post a micro-task</h2>
+          <Field label="Title">
+            <input
+              name="title"
+              required
+              placeholder="Summarize 10 support tickets"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Brief">
+            <textarea
+              name="description"
+              required
+              rows={3}
+              placeholder="What does done look like?"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Reward (USDC)">
+            <input
+              name="reward"
+              type="number"
+              step="0.01"
+              min="0.01"
+              defaultValue="5"
+              required
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Window (days, 0 = open)">
+            <input
+              name="days"
+              type="number"
+              min="0"
+              max="90"
+              defaultValue="3"
+              className={inputCls}
+            />
+          </Field>
+          <button
+            type="submit"
+            disabled={props.loading}
+            className="w-full py-2.5 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {props.loading ? "Escrowing…" : "Escrow &amp; post"}
+          </button>
+          <p className="text-xs text-slate-400">
+            The reward is locked in the contract until you approve the work, and
+            refundable while nothing is under review.
+          </p>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
+const inputCls =
+  "w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500";
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-slate-600 mb-1">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+/* ------------------------------------------------------------------ Vault */
+
+function VaultTab() {
+  const [state, setState] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [fundAmt, setFundAmt] = useState("10");
+
+  async function load() {
+    if (!VAULT) return;
+    const provider = new ethers.BrowserProvider(window.ethereum!);
+    const c = new ethers.Contract(VAULT, AGENTLY_ABI, provider);
+    const [owner, agent, policy, totalSpent, spendCount, remaining, balance] =
+      await Promise.all([
+        c.owner(),
+        c.agent(),
+        c.policy(),
+        c.totalSpent(),
+        c.spendCount(),
+        c.dailyRemaining(),
+        provider.getBalance(VAULT),
+      ]);
+    setState({
+      owner,
+      agent,
+      policy,
+      totalSpent,
+      spendCount,
+      remaining,
+      balance,
+    });
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function run(fn: string, label: string, ...args: any[]) {
+    try {
+      setLoading(true);
+      const provider = new ethers.BrowserProvider(window.ethereum!);
+      const s = await provider.getSigner();
+      const c = new ethers.Contract(VAULT, AGENTLY_ABI, s);
+      const t = await c[fn](...args);
+      await t.wait();
+      alert(label);
+      await load();
+    } catch (e: any) {
+      alert("Failed: " + (e?.reason || e?.message));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!state) return <p className="text-sm text-slate-500">Loading vault…</p>;
+
+  const cap = ethers.formatEther(state.policy.perSpendCap);
+  const budget = ethers.formatEther(state.policy.dailyBudget);
+  const remaining = ethers.formatEther(state.remaining);
+  const usedPct = state.policy.dailyBudget
+    ? (Number(ethers.formatEther(state.policy.dailyBudget - state.remaining)) /
+        Number(budget)) *
+      100
+    : 0;
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-slate-900">Agent vault</h2>
+          {state.policy.paused ? (
+            <span className="text-xs px-2 py-1 rounded-full bg-rose-100 text-rose-700 font-medium">
+              paused
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+              live
+            </span>
+          )}
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-4">
+          <Stat label="Balance" value={`${Number(ethers.formatEther(state.balance)).toFixed(2)} USDC`} />
+          <Stat label="Spent today" value={`${Number(remaining).toFixed(2)} / ${Number(budget).toFixed(2)}`} />
+          <Stat label="Per-spend cap" value={cap === "0.0" ? "unbounded" : `${Number(cap).toFixed(2)} USDC`} />
+          <Stat label="Total spends" value={state.spendCount.toString()} />
+        </div>
+
+        <div className="mt-5">
+          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+            <div
+              className="h-full bg-emerald-500"
+              style={{ width: `${Math.min(100, usedPct)}%` }}
+            />
+          </div>
+          <p className="text-xs text-slate-500 mt-1.5">
+            {usedPct.toFixed(0)}% of today's budget consumed
+          </p>
+        </div>
+
+        <div className="mt-6 space-y-2 text-sm">
+          <div className="flex justify-between text-slate-600">
+            <span>Owner (you)</span>
+            <code>{short(state.owner)}</code>
+          </div>
+          <div className="flex justify-between text-slate-600">
+            <span>Agent EOA</span>
+            <code>{short(state.agent)}</code>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-2">
+          <button
+            onClick={() => {
+              const v = prompt("Fund amount in USDC:", fundAmt);
+              if (v) {
+                setFundAmt(v);
+                run("fund", "Vault funded", { value: ethers.parseEther(v) });
+              }
+            }}
+            disabled={loading}
+            className="text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            Fund vault
+          </button>
+          <button
+            onClick={() => run("withdrawAll", "Withdrawn to owner")}
+            disabled={loading}
+            className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Withdraw all
+          </button>
+          <button
+            onClick={() => run("setPaused", "Vault paused", !state.policy.paused)}
+            disabled={loading}
+            className="text-sm font-medium px-3 py-1.5 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+          >
+            {state.policy.paused ? "Unpause" : "Pause agent"}
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="font-semibold text-slate-900">Spending policy</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          The agent can only transact inside these bounds. Native USDC means no
+          approvals, no wrapping — the bounds are the whole security model.
+        </p>
+
+        <div className="mt-5 space-y-4">
+          <Field label="Per-spend cap (USDC)">
+            <input
+              id="cap"
+              type="number"
+              step="0.01"
+              defaultValue={cap === "0.0" ? "" : Number(cap).toFixed(2)}
+              placeholder="0 = unbounded"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Daily budget (USDC)">
+            <input
+              id="budget"
+              type="number"
+              step="0.01"
+              defaultValue={budget === "0.0" ? "" : Number(budget).toFixed(2)}
+              className={inputCls}
+            />
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" id="wl" defaultChecked={!!state.policy.whitelistEnabled} />
+            Only whitelisted recipients
+          </label>
+          <button
+            onClick={() => {
+              const c = (document.getElementById("cap") as HTMLInputElement).value;
+              const b = (document.getElementById("budget") as HTMLInputElement).value;
+              const w = (document.getElementById("wl") as HTMLInputElement).checked;
+              run(
+                "setPolicy",
+                "Policy updated",
+                ethers.parseEther(c || "0"),
+                ethers.parseEther(b || "0"),
+                w
+              );
+            }}
+            disabled={loading}
+            className="w-full py-2.5 rounded-lg bg-slate-900 text-white font-medium hover:bg-slate-700 disabled:opacity-50"
+          >
+            Apply policy
+          </button>
+        </div>
+
+        <div className="mt-6 border-t border-slate-100 pt-4">
+          <div className="flex gap-2">
+            <input
+              id="wladdr"
+              placeholder="0x… recipient to whitelist"
+              className={inputCls}
+            />
+            <button
+              onClick={() =>
+                run(
+                  "setWhitelist",
+                  "Whitelist updated",
+                  (document.getElementById("wladdr") as HTMLInputElement).value,
+                  true
+                )
+              }
+              disabled={loading}
+              className="shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Allow
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-slate-50 border border-slate-100 p-3">
+      <div className="text-[11px] text-slate-500 uppercase tracking-wide">
+        {label}
+      </div>
+      <div className="font-semibold text-slate-900 text-sm mt-0.5">{value}</div>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- Agents */
+
+function AgentsTab() {
+  const [agents, setAgents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    if (!REGISTRY) return;
+    const provider = new ethers.BrowserProvider(window.ethereum!);
+    const c = new ethers.Contract(REGISTRY, AGENTLY_ABI, provider);
+    setAgents(await c.getAllAgents());
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function register(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      const f = new FormData(e.currentTarget as HTMLFormElement);
+      const provider = new ethers.BrowserProvider(window.ethereum!);
+      const s = await provider.getSigner();
+      const c = new ethers.Contract(REGISTRY, AGENTLY_ABI, s);
+      const t = await c.register(
+        String(f.get("handle")),
+        String(f.get("caps")),
+        String(f.get("meta") || "ipfs://"),
+        VAULT || ethers.ZeroAddress
+      );
+      await t.wait();
+      alert("Agent registered on Arc");
+      load();
+    } catch (e: any) {
+      alert("Failed: " + (e?.reason || e?.message));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="grid md:grid-cols-[1fr_360px] gap-8">
+      <section>
+        <h2 className="text-sm font-semibold text-slate-700 mb-3">
+          {agents.length} registered agent{agents.length === 1 ? "" : "s"}
+        </h2>
+        {agents.length === 0 && (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-slate-500 text-sm">
+            No agents yet. Register one so task posters can see its track
+            record.
+          </div>
+        )}
+        <div className="space-y-3">
+          {agents.map((a, i) => (
+            <article
+              key={i}
+              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm flex items-center justify-between gap-4"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-900">{a.handle}</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">
+                    {a.capabilities}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  earned {Number(ethers.formatEther(a.totalEarned)).toFixed(2)}{" "}
+                  USDC · {a.tasksCompleted.toString()} task
+                  {a.tasksCompleted === 1n ? "" : "s"} completed
+                </p>
+              </div>
+              {a.vault !== ethers.ZeroAddress && (
+                <span className="text-xs text-slate-400 shrink-0">
+                  vault {short(a.vault)}
+                </span>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <aside>
+        <form
+          onSubmit={register}
+          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4"
+        >
+          <h2 className="font-semibold text-slate-900">Register an agent</h2>
+          <Field label="Handle">
+            <input name="handle" required placeholder="ARC-1" className={inputCls} />
+          </Field>
+          <Field label="Capabilities">
+            <input
+              name="caps"
+              required
+              placeholder="research,summary"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Metadata URI">
+            <input name="meta" placeholder="ipfs://…" className={inputCls} />
+          </Field>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? "Registering…" : "Register"}
+          </button>
+        </form>
+      </aside>
+    </div>
+  );
+}

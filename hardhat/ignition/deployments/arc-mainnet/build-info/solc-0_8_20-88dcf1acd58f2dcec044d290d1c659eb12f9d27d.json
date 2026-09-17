@@ -1,0 +1,49 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_20-88dcf1acd58f2dcec044d290d1c659eb12f9d27d",
+  "solcVersion": "0.8.20",
+  "solcLongVersion": "0.8.20+commit.a1b79de6",
+  "compilerType": "solc",
+  "toolVersions": {
+    "hardhat": "3.16.0"
+  },
+  "userSourceNameMap": {
+    "contracts/AgentRegistry.sol": "project/contracts/AgentRegistry.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "shanghai",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/AgentRegistry.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\n/// @title AgentRegistry — identity and on-chain reputation for AI agents\n/// @notice Autonomous agents are first-class participants on Arc: they hold\n///         USDC, they pay for services, they get paid for work. This registry\n///         gives each agent a persistent, verifiable profile — handle,\n///         capabilities, vault address and lifetime earnings — so a task\n///         poster can judge an agent's track record before trusting it.\ncontract AgentRegistry {\n    struct Agent {\n        string handle; // e.g. \"ARC-1\"\n        string capabilities; // e.g. \"research,code-review,sentiment\"\n        string metadataUri; // off-chain payload (model, version, attestation)\n        address vault; // optional AgentVault holding the agent's budget\n        bool registered;\n        uint256 tasksCompleted;\n        uint256 totalEarned; // native USDC, 18 decimals\n        uint256 registeredAt;\n    }\n\n    mapping(address => Agent) public agents;\n    address[] public agentList;\n    uint256 public agentCount;\n\n    // Sole writer of reputation data. Keeping it permissioned means the\n    // numbers shown on an agent's profile can't be inflated by self-reports.\n    address public authority;\n\n    event AgentRegistered(address indexed agent, string handle, address vault);\n    event AgentUpdated(address indexed agent, string capabilities, string metadataUri);\n    event CompletionRecorded(address indexed agent, uint256 amount, uint256 total);\n\n    error NotRegistered();\n    error AlreadyRegistered();\n    error NotAuthority();\n    error EmptyHandle();\n\n    constructor() {\n        authority = msg.sender;\n    }\n\n    function setAuthority(address _authority) external {\n        if (msg.sender != authority) revert NotAuthority();\n        authority = _authority;\n    }\n\n    /// @notice Register a new agent. Call once; use `updateProfile` after.\n    function register(\n        string calldata _handle,\n        string calldata _capabilities,\n        string calldata _metadataUri,\n        address _vault\n    ) external {\n        if (bytes(_handle).length == 0) revert EmptyHandle();\n        if (agents[msg.sender].registered) revert AlreadyRegistered();\n\n        agents[msg.sender] = Agent({\n            handle: _handle,\n            capabilities: _capabilities,\n            metadataUri: _metadataUri,\n            vault: _vault,\n            registered: true,\n            tasksCompleted: 0,\n            totalEarned: 0,\n            registeredAt: block.timestamp\n        });\n        agentList.push(msg.sender);\n        agentCount++;\n\n        emit AgentRegistered(msg.sender, _handle, _vault);\n    }\n\n    function updateProfile(string calldata _capabilities, string calldata _metadataUri) external {\n        if (!agents[msg.sender].registered) revert NotRegistered();\n        agents[msg.sender].capabilities = _capabilities;\n        agents[msg.sender].metadataUri = _metadataUri;\n        emit AgentUpdated(msg.sender, _capabilities, _metadataUri);\n    }\n\n    function setVault(address _vault) external {\n        if (!agents[msg.sender].registered) revert NotRegistered();\n        agents[msg.sender].vault = _vault;\n        emit AgentUpdated(msg.sender, agents[msg.sender].capabilities, agents[msg.sender].metadataUri);\n    }\n\n    /// @notice Called by the TaskBoard authority when an agent is paid.\n    ///         Reverts only in the unregistered case — but the caller wraps it\n    ///         in try/catch, so a human payout never breaks the flow.\n    function recordCompletion(address _agent, uint256 _amount) external {\n        if (msg.sender != authority) revert NotAuthority();\n        if (!agents[_agent].registered) revert NotRegistered();\n\n        Agent storage a = agents[_agent];\n        a.tasksCompleted += 1;\n        a.totalEarned += _amount;\n\n        emit CompletionRecorded(_agent, _amount, a.totalEarned);\n    }\n\n    function getAgent(address _agent) external view returns (Agent memory) {\n        return agents[_agent];\n    }\n\n    function getAllAgents() external view returns (Agent[] memory) {\n        Agent[] memory all = new Agent[](agentCount);\n        for (uint256 i = 0; i < agentCount; i++) {\n            all[i] = agents[agentList[i]];\n        }\n        return all;\n    }\n}\n"
+      }
+    }
+  }
+}

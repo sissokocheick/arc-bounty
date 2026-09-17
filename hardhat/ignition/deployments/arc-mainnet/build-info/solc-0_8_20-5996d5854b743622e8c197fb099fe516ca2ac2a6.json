@@ -1,0 +1,49 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_20-5996d5854b743622e8c197fb099fe516ca2ac2a6",
+  "solcVersion": "0.8.20",
+  "solcLongVersion": "0.8.20+commit.a1b79de6",
+  "compilerType": "solc",
+  "toolVersions": {
+    "hardhat": "3.16.0"
+  },
+  "userSourceNameMap": {
+    "contracts/AgentVault.sol": "project/contracts/AgentVault.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "shanghai",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/AgentVault.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\n/// @title AgentVault — a policy-governed wallet for autonomous AI agents\n/// @notice Arc's native gas asset IS USDC, so an agent with a funded wallet can\n///         transact autonomously without wrapping or approving ERC-20s. The\n///         risk, of course, is an agent draining its budget on a bug or a\n///         prompt-injected shopping spree. This vault makes that safe:\n///         spending is bounded by an owner-defined policy.\n///\n///         All amounts are native USDC in 18 decimals.\ncontract AgentVault {\n    struct Policy {\n        uint256 perSpendCap; // max single spend\n        uint256 dailyBudget; // max total spend per UTC day\n        bool whitelistEnabled; // restrict recipients to an allow-list\n        bool paused; // kill switch\n    }\n\n    address public owner; // human who funds and controls the vault\n    address public agent; // the autonomous EOA permitted to spend\n    string public label; // human-readable agent name, e.g. \"ARC-1 researcher\"\n\n    Policy public policy;\n    mapping(address => bool) public whitelisted;\n\n    // Daily budget accounting. block.timestamp on Arc is non-decreasing, so the\n    // UTC day index only ever advances and the reset below is safe.\n    uint256 public lastDay; // block.timestamp / 1 days\n    uint256 public spentToday;\n\n    uint256 public totalSpent;\n    uint256 public spendCount;\n\n    event Funded(address indexed by, uint256 amount, uint256 balance);\n    event Spent(uint256 indexed index, address indexed to, uint256 amount, string reason);\n    event Withdrawn(address indexed to, uint256 amount);\n    event PolicyUpdated(uint256 perSpendCap, uint256 dailyBudget, bool whitelistEnabled);\n    event WhitelistSet(address indexed who, bool allowed);\n    event AgentSet(address indexed agent);\n    event Paused(bool paused);\n\n    error OnlyOwner();\n    error OnlyAgent();\n    error VaultPaused();\n    error ZeroAddress();\n    error ExceedsPerSpendCap(uint256 cap);\n    error ExceedsDailyBudget(uint256 remaining);\n    error NotWhitelisted(address who);\n    error InsufficientBalance(uint256 available);\n\n    constructor(address _agent, string memory _label) payable {\n        owner = msg.sender;\n        agent = _agent;\n        label = _label;\n        lastDay = block.timestamp / 1 days;\n        if (msg.value > 0) emit Funded(msg.sender, msg.value, msg.value);\n    }\n\n    modifier onlyOwner() {\n        if (msg.sender != owner) revert OnlyOwner();\n        _;\n    }\n\n    modifier onlyAgent() {\n        if (msg.sender != agent) revert OnlyAgent();\n        _;\n    }\n\n    /// @notice The agent spends native USDC within the bounds of its policy.\n    /// @param to       recipient\n    /// @param amount   native USDC (18 decimals)\n    /// @param reason   machine-readable purpose, recorded on-chain for audit\n    function spend(address to, uint256 amount, string calldata reason) external onlyAgent {\n        if (policy.paused) revert VaultPaused();\n        if (to == address(0)) revert ZeroAddress();\n        if (amount == 0) revert InsufficientBalance(0);\n        // A zero cap means \"unbounded\" — only the daily budget applies.\n        if (perSpendCap() != 0 && amount > perSpendCap()) {\n            revert ExceedsPerSpendCap(perSpendCap());\n        }\n\n        _rolloverDay();\n\n        if (policy.dailyBudget == 0) revert ExceedsDailyBudget(0);\n        uint256 remaining = policy.dailyBudget - spentToday;\n        if (amount > remaining) revert ExceedsDailyBudget(remaining);\n        // balance check is enforced by the transfer itself, but give a clearer\n        // error than a bare failed call.\n        if (amount > address(this).balance) revert InsufficientBalance(address(this).balance);\n\n        if (policy.whitelistEnabled && !whitelisted[to]) revert NotWhitelisted(to);\n\n        spentToday += amount;\n        totalSpent += amount;\n        uint256 index = spendCount++;\n\n        emit Spent(index, to, amount, reason);\n\n        (bool ok, ) = to.call{value: amount}(\"\");\n        if (!ok) revert InsufficientBalance(address(this).balance);\n    }\n\n    /// @notice Advance the daily window. Called on every spend; idempotent.\n    function _rolloverDay() internal {\n        uint256 today = block.timestamp / 1 days;\n        if (today != lastDay) {\n            lastDay = today;\n            spentToday = 0;\n        }\n    }\n\n    /// @dev Per-spend cap has no zero default: an unset policy (0) means\n    ///      per-spend is unbounded and only the daily budget applies.\n    function perSpendCap() public view returns (uint256) {\n        return policy.perSpendCap;\n    }\n\n    /// @notice Remaining spendable amount in the current day.\n    function dailyRemaining() external view returns (uint256) {\n        uint256 today = block.timestamp / 1 days;\n        uint256 spent = (today == lastDay) ? spentToday : 0;\n        return policy.dailyBudget > spent ? policy.dailyBudget - spent : 0;\n    }\n\n    // ------------------------------------------------------------- owner ops\n\n    function fund() external payable onlyOwner {\n        emit Funded(msg.sender, msg.value, address(this).balance);\n    }\n\n    function withdraw(uint256 amount) external onlyOwner {\n        if (amount > address(this).balance) revert InsufficientBalance(address(this).balance);\n        (bool ok, ) = owner.call{value: amount}(\"\");\n        if (!ok) revert InsufficientBalance(address(this).balance);\n        emit Withdrawn(owner, amount);\n    }\n\n    function withdrawAll() external onlyOwner {\n        uint256 amount = address(this).balance;\n        (bool ok, ) = owner.call{value: amount}(\"\");\n        if (!ok) revert InsufficientBalance(address(this).balance);\n        emit Withdrawn(owner, amount);\n    }\n\n    function setPolicy(uint256 _perSpendCap, uint256 _dailyBudget, bool _whitelistEnabled) external onlyOwner {\n        policy.perSpendCap = _perSpendCap;\n        policy.dailyBudget = _dailyBudget;\n        policy.whitelistEnabled = _whitelistEnabled;\n        emit PolicyUpdated(_perSpendCap, _dailyBudget, _whitelistEnabled);\n    }\n\n    function setWhitelist(address who, bool allowed) external onlyOwner {\n        whitelisted[who] = allowed;\n        emit WhitelistSet(who, allowed);\n    }\n\n    function setAgent(address _agent) external onlyOwner {\n        if (_agent == address(0)) revert ZeroAddress();\n        agent = _agent;\n        emit AgentSet(_agent);\n    }\n\n    function setPaused(bool _paused) external onlyOwner {\n        policy.paused = _paused;\n        emit Paused(_paused);\n    }\n\n    receive() external payable {\n        // anyone can tip/fund the vault; owner-only withdrawal protects it\n        emit Funded(msg.sender, msg.value, address(this).balance);\n    }\n}\n"
+      }
+    }
+  }
+}

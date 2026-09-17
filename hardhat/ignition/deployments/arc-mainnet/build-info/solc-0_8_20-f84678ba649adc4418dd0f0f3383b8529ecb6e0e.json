@@ -1,0 +1,49 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_20-f84678ba649adc4418dd0f0f3383b8529ecb6e0e",
+  "solcVersion": "0.8.20",
+  "solcLongVersion": "0.8.20+commit.a1b79de6",
+  "compilerType": "solc",
+  "toolVersions": {
+    "hardhat": "3.16.0"
+  },
+  "userSourceNameMap": {
+    "contracts/TaskBoard.sol": "project/contracts/TaskBoard.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "shanghai",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/TaskBoard.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\n/// @title TaskBoard — micro-task escrow market for humans and autonomous agents\n/// @notice Funds are escrowed in native USDC (Arc's gas asset, 18 decimals).\n///         IMPORTANT: on Arc the native gas token uses 18 decimals while the\n///         optional ERC-20 USDC interface uses 6. This contract only ever\n///         touches msg.value (native, 18 decimals) — never call it with\n///         ERC-20 amounts, the two differ by a factor of 1e12.\ncontract TaskBoard {\n    struct Task {\n        uint256 id;\n        address creator;\n        string title;\n        string description;\n        uint256 reward; // native USDC, 18 decimals\n        address freelancer; // address(0) until work is submitted\n        string proofUrl;\n        bool submitted; // a submission is pending review\n        bool completed; // approved and paid out\n        bool cancelled; // creator cancelled and got refunded\n        uint256 deadline; // unix seconds; block.timestamp on Arc is non-decreasing\n    }\n\n    uint256 public taskCount;\n    mapping(uint256 => Task) public tasks;\n\n    // Optional reputation feed: TaskBoard notifies the registry when an agent\n    // gets paid, so agent profiles stay in sync without off-chain indexing.\n    IAgentRegistry public immutable registry;\n\n    event TaskPosted(uint256 indexed id, address indexed creator, uint256 reward, string title, uint256 deadline);\n    event WorkSubmitted(uint256 indexed id, address indexed freelancer, string proofUrl);\n    event WorkApproved(uint256 indexed id, address indexed freelancer, uint256 reward);\n    event WorkRejected(uint256 indexed id, address indexed freelancer);\n    event TaskCancelled(uint256 indexed id, address indexed creator, uint256 refund);\n    event ReputationUpdated(address indexed agent, uint256 reward, bool success);\n\n    error NotCreator();\n    error IsCreator();\n    error TaskNotFound();\n    error AlreadySubmitted();\n    error NotSubmitted();\n    error AlreadyCompleted();\n    error AlreadyCancelled();\n    error Expired();\n    error ZeroReward();\n    error TransferFailed();\n\n    constructor(address _registry) {\n        registry = IAgentRegistry(_registry);\n    }\n\n    // ---------------------------------------------------------------- flows\n\n    /// @notice Post a micro-task and escrow the reward in native USDC.\n    function postTask(string calldata _title, string calldata _description, uint256 _deadline)\n        external\n        payable\n    {\n        if (msg.value == 0) revert ZeroReward();\n        // A deadline in the past simply means the task is immediately expired,\n        // so guard it to avoid unusable escrows.\n        if (_deadline != 0 && _deadline < block.timestamp) revert Expired();\n\n        uint256 id = taskCount;\n        tasks[id] = Task({\n            id: id,\n            creator: msg.sender,\n            title: _title,\n            description: _description,\n            reward: msg.value,\n            freelancer: address(0),\n            proofUrl: \"\",\n            submitted: false,\n            completed: false,\n            cancelled: false,\n            deadline: _deadline\n        });\n\n        emit TaskPosted(id, msg.sender, msg.value, _title, _deadline);\n        taskCount = id + 1;\n    }\n\n    /// @notice Submit proof of work. Only one pending submission at a time:\n    ///         the creator can `rejectWork` to reopen the task, which is what\n    ///         makes the board spam-proof — a bad submission cannot lock funds.\n    function submitWork(uint256 _id, string calldata _proofUrl) external {\n        Task storage t = tasks[_id];\n        if (t.creator == address(0)) revert TaskNotFound();\n        if (msg.sender == t.creator) revert IsCreator();\n        if (t.submitted) revert AlreadySubmitted();\n        if (t.completed) revert AlreadyCompleted();\n        if (t.cancelled) revert AlreadyCancelled();\n        if (!_live(t)) revert Expired();\n\n        t.freelancer = msg.sender;\n        t.proofUrl = _proofUrl;\n        t.submitted = true;\n\n        emit WorkSubmitted(_id, msg.sender, _proofUrl);\n    }\n\n    /// @notice Approve the pending submission and pay the worker instantly.\n    function approveWork(uint256 _id) external {\n        Task storage t = tasks[_id];\n        if (msg.sender != t.creator) revert NotCreator();\n        // Check the terminal state first: re-approving a settled task should\n        // report AlreadyCompleted, not \"nothing to approve\".\n        if (t.completed) revert AlreadyCompleted();\n        if (t.cancelled) revert AlreadyCancelled();\n        if (!t.submitted) revert NotSubmitted();\n\n        t.completed = true;\n        t.submitted = false;\n\n        // effects before interaction: mark settled before the value leaves.\n        (bool ok, ) = t.freelancer.call{value: t.reward}(\"\");\n        if (!ok) revert TransferFailed();\n\n        emit WorkApproved(_id, t.freelancer, t.reward);\n\n        // Best-effort reputation update. A misconfigured registry must never\n        // break a payout, so failures here are caught and surfaced as an event\n        // rather than reverting the whole transaction.\n        if (address(registry) != address(0)) {\n            try registry.recordCompletion(t.freelancer, t.reward) {\n                emit ReputationUpdated(t.freelancer, t.reward, true);\n            } catch {\n                emit ReputationUpdated(t.freelancer, t.reward, false);\n            }\n        }\n    }\n\n    /// @notice Reject a submission and reopen the task for other workers.\n    function rejectWork(uint256 _id) external {\n        Task storage t = tasks[_id];\n        if (msg.sender != t.creator) revert NotCreator();\n        if (t.completed) revert AlreadyCompleted();\n        if (t.cancelled) revert AlreadyCancelled();\n        if (!t.submitted) revert NotSubmitted();\n\n        address rejected = t.freelancer;\n        t.freelancer = address(0);\n        t.proofUrl = \"\";\n        t.submitted = false;\n\n        emit WorkRejected(_id, rejected);\n    }\n\n    /// @notice Cancel an open task and refund the escrowed reward.\n    function cancelTask(uint256 _id) external {\n        Task storage t = tasks[_id];\n        if (msg.sender != t.creator) revert NotCreator();\n        if (t.completed) revert AlreadyCompleted();\n        if (t.cancelled) revert AlreadyCancelled();\n        // A task with work under review is no longer \"open\" — pay or reject it.\n        if (t.submitted) revert AlreadySubmitted();\n\n        t.cancelled = true;\n        uint256 refund = t.reward;\n\n        (bool ok, ) = t.creator.call{value: refund}(\"\");\n        if (!ok) revert TransferFailed();\n\n        emit TaskCancelled(_id, t.creator, refund);\n    }\n\n    // --------------------------------------------------------------- views\n\n    function _live(Task storage t) internal view returns (bool) {\n        return t.deadline == 0 || block.timestamp <= t.deadline;\n    }\n\n    function getTask(uint256 _id) external view returns (Task memory) {\n        return tasks[_id];\n    }\n\n    /// @notice Every task, newest first. Cheap-ish for view calls; the UI\n    ///         paginates rather than rendering thousands of cards.\n    function getAllTasks() external view returns (Task[] memory) {\n        Task[] memory all = new Task[](taskCount);\n        for (uint256 i = 0; i < taskCount; i++) {\n            all[i] = tasks[i];\n        }\n        return all;\n    }\n}\n\n/// @dev Minimal interface so TaskBoard compiles without importing the full\n///      registry contract. Named with the I-prefix to avoid an artifact-name\n///      collision with the concrete AgentRegistry contract.\ninterface IAgentRegistry {\n    function recordCompletion(address agent, uint256 amount) external;\n}\n"
+      }
+    }
+  }
+}

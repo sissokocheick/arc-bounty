@@ -1,0 +1,25 @@
+{
+  "name": "agently-contracts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "node": "hardhat node --port 18545",
+    "seed": "hardhat run scripts/seed.mjs --network localhost",
+    "agent": "hardhat run scripts/agent.mjs --network localhost",
+    "watcher": "hardhat run scripts/watcher.mjs --network localhost",
+    "deploy:testnet": "hardhat ignition deploy ./ignition/modules/ArcBounty.js --network arcTestnet",
+    "deploy:mainnet": "hardhat ignition deploy ./ignition/modules/ArcBounty.js --network arc"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.7",
+    "chai": "^5.3.3",
+    "ethers": "^6.17.0",
+    "hardhat": "^3.16.0"
+  }
+}
