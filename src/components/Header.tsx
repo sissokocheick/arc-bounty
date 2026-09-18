@@ -19,6 +19,15 @@ export default function Header() {
   const [balance, setBalance] = useState<string>("");
   const [picker, setPicker] = useState<ProviderEntry[] | null>(null);
   const [provider, setProvider] = useState<any>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  function forgetWallet() {
+    setChosenProvider(null);
+    setProvider(null);
+    setAccount("");
+    setBalance("");
+    setChainOk(false);
+  }
 
   useEffect(() => {
     // Pick the only installed wallet automatically, without prompting — the
@@ -94,6 +103,32 @@ export default function Header() {
     connectWith(providers[0]);
   }
 
+  function copyAddress() {
+    setMenuOpen(false);
+    navigator.clipboard?.writeText(account).catch(() => {});
+  }
+
+  function switchWallet() {
+    setMenuOpen(false);
+    forgetWallet();
+    connect();
+  }
+
+  async function disconnect() {
+    setMenuOpen(false);
+    try {
+      // EIP-2255. Not every wallet implements it; the fallback below still
+      // clears the app's side of the connection.
+      await provider?.request({
+        method: "wallet_revokePermissions",
+        params: [{ eth_accounts: {} }],
+      });
+    } catch {
+      /* wallet keeps its own permissions; we forget the account locally */
+    }
+    forgetWallet();
+  }
+
   return (
     <header className="sticky top-0 z-20 backdrop-blur-md bg-white/80 border-b border-slate-200">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -119,9 +154,44 @@ export default function Header() {
             </span>
           )}
           {account ? (
-            <code className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700">
-              {account.slice(0, 6)}…{account.slice(-4)}
-            </code>
+            <div className="relative">
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors flex items-center gap-1.5"
+                title={account}
+              >
+                {account.slice(0, 6)}…{account.slice(-4)}
+                <span className="text-slate-400 text-[10px]">▾</span>
+              </button>
+              {menuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-52 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden z-30">
+                    <button
+                      onClick={copyAddress}
+                      className="w-full text-left px-3 py-2.5 text-sm text-slate-800 hover:bg-emerald-50 transition-colors"
+                    >
+                      Copy address
+                    </button>
+                    <button
+                      onClick={switchWallet}
+                      className="w-full text-left px-3 py-2.5 text-sm text-slate-800 hover:bg-emerald-50 transition-colors"
+                    >
+                      Switch wallet
+                    </button>
+                    <button
+                      onClick={disconnect}
+                      className="w-full text-left px-3 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           ) : (
             <div className="relative">
               <button
