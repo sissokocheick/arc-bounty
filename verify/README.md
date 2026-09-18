@@ -11,7 +11,7 @@ of one contract — paste it into the verifier as a single Solidity file.
 | Compiler | `0.8.20` |
 | Optimization | enabled |
 | Optimization runs | `200` |
-| EVM version | default (london) |
+| **EVM version** | **shanghai** |
 
 These match `hardhat.config.js`. If they differ even slightly the bytecode will
 not match and verification will fail.
