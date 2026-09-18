@@ -37,3 +37,17 @@ ARC-1
 The agent EOA was rotated off the deployer after deployment with `setAgent`, so
 the constructor argument of AgentVault is the deployer address, not the current
 agent (`0x77D98D3DBb4f1E41725C55ab7848d5C7C34Afa4a`).
+
+
+## On "partial match"
+
+Verifying a flattened file reports *partial match*. This is expected and not a
+problem. solc appends a CBOR metadata hash at the end of the bytecode, computed
+over the layout of the source files. The contracts were deployed from several
+files and are verified as one flattened file, so those hashes cannot be equal;
+every byte of executable bytecode matches. Anyone who needs a byte-exact match
+can rebuild locally from this repo and compare against `eth_getCode`.
+
+If the explorer instead rejects outright, the cause is one of: the dotenv banner
+on line 1 of a flattened file (regenerate with `sed '/^◇/d'`), or the EVM version
+being anything other than shanghai.
