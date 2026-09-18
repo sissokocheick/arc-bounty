@@ -11,6 +11,7 @@ import {
   explorerTx,
   fmt,
   getReadContract,
+  describeError,
   getReceiptAny,
   readWithRetry,
   short,
@@ -66,7 +67,7 @@ export default function Home() {
       setReadError("");
       setTasksLoaded(true);
     } catch (e: any) {
-      setReadError(e?.reason || e?.message || "Could not reach the Arc RPC");
+      setReadError(describeError(e));
     }
   }, []);
 
@@ -149,7 +150,7 @@ export default function Home() {
       toast.push({
         kind: "error",
         title: "Transaction failed",
-        body: e?.reason || e?.message || "unknown error",
+        body: describeError(e),
       });
     } finally {
       setLoading(false);
@@ -549,7 +550,7 @@ function TasksTab(props: {
                   )}
                   {!mine && t.submitted && (
                     <span className="text-xs text-slate-400">
-                      under review
+                      under review · only the creator can approve payout
                     </span>
                   )}
                 </div>
@@ -703,7 +704,7 @@ function VaultTab() {
       setState({ owner, agent, policy, totalSpent, spendCount, remaining, balance });
       setError("");
     } catch (e: any) {
-      setError(e?.reason || e?.message || "Could not reach the Arc RPC");
+      setError(describeError(e));
     }
   }
 
@@ -761,7 +762,7 @@ function VaultTab() {
       toast.push({
         kind: "error",
         title: "Action failed",
-        body: e?.reason || e?.message || "unknown error",
+        body: describeError(e),
       });
     } finally {
       setLoading(false);
@@ -1107,7 +1108,7 @@ function AgentsTab() {
       toast.push({
         kind: "error",
         title: "Registration failed",
-        body: e?.reason || e?.message || "unknown error",
+        body: describeError(e),
       });
     } finally {
       setLoading(false);

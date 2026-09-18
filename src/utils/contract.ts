@@ -146,3 +146,236 @@ export function short(addr: string | undefined | null): string {
   if (!addr) return "—";
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
+
+/* ------------------------------------------------- Decoding revert reasons */
+
+// A reverted call arrives in the browser as a raw 4-byte selector plus ABI-
+// encoded arguments — "0x5fc483c5" is meaningless to a user, yet it is the
+// single most useful piece of information the contract can give us: it says
+// exactly which guard fired. Each entry below turns one selector into the
+// sentence a person needs to hear.
+const KNOWN_ERRORS: {
+  sig: string;
+  params: string;
+  explain: (args: ethers.Result) => string;
+}[] = [
+  // TaskBoard
+  {
+    sig: "NotCreator()",
+    params: "",
+    explain: () =>
+      "Only the wallet that posted this task can review or cancel it. You are connected as a different wallet.",
+  },
+  {
+    sig: "IsCreator()",
+    params: "",
+    explain: () =>
+      "You posted this task, so you cannot submit work on it — post a second task and submit there instead.",
+  },
+  {
+    sig: "TaskNotFound()",
+    params: "",
+    explain: () => "That task no longer exists on the board.",
+  },
+  {
+    sig: "AlreadySubmitted()",
+    params: "",
+    explain: () =>
+      "Work is already pending review on this task — wait for the creator to approve or reject it.",
+  },
+  {
+    sig: "NotSubmitted()",
+    params: "",
+    explain: () =>
+      "There is no work to review yet. Nothing is pending on this task.",
+  },
+  {
+    sig: "AlreadyCompleted()",
+    params: "",
+    explain: () => "This task is already approved and paid out.",
+  },
+  {
+    sig: "AlreadyCancelled()",
+    params: "",
+    explain: () => "This task was cancelled and the reward refunded.",
+  },
+  {
+    sig: "Expired()",
+    params: "",
+    explain: () =>
+      "The deadline on this task has passed, so it can no longer receive work.",
+  },
+  {
+    sig: "ZeroReward()",
+    params: "",
+    explain: () => "The reward must be greater than zero.",
+  },
+  {
+    sig: "TransferFailed()",
+    params: "",
+    explain: () =>
+      "The escrow paid out successfully on-chain, but the recipient refused the incoming USDC. The task is settled.",
+  },
+  // AgentVault
+  {
+    sig: "OnlyOwner()",
+    params: "",
+    explain: () =>
+      "Only the vault owner can do this. You are connected with a wallet that is not the owner of this vault.",
+  },
+  {
+    sig: "OnlyAgent()",
+    params: "",
+    explain: () =>
+      "Only the agent's own key can spend from the vault — that is the point of a policy-governed wallet.",
+  },
+  {
+    sig: "VaultPaused()",
+    params: "",
+    explain: () =>
+      "The vault is paused. Spending is frozen until the owner resumes it.",
+  },
+  {
+    sig: "ZeroAddress()",
+    params: "",
+    explain: () => "The address cannot be the zero address.",
+  },
+  {
+    sig: "ExceedsPerSpendCap(uint256)",
+    params: "uint256",
+    explain: (a) =>
+      `This one payment is above the vault's per-spend cap of ${fmt(
+        BigInt(a[0])
+      )} USDC. Raise the cap or split the payment.`,
+  },
+  {
+    sig: "ExceedsDailyBudget(uint256)",
+    params: "uint256",
+    explain: (a) =>
+      `Over the daily budget — only ${fmt(
+        BigInt(a[0])
+      )} USDC of spend is left today. The budget resets at 00:00 UTC.`,
+  },
+  {
+    sig: "NotWhitelisted(address)",
+    params: "address",
+    explain: (a) =>
+      `${short(String(a[0]))} is not on the vault's allowlist, and the allowlist is currently enforced.`,
+  },
+  {
+    sig: "InsufficientBalance(uint256)",
+    params: "uint256",
+    explain: (a) => `Not enough USDC — the vault holds only ${fmt(BigInt(a[0]))}.`,
+  },
+  // AgentRegistry
+  {
+    sig: "NotRegistered()",
+    params: "",
+    explain: () => "That wallet is not registered as an agent yet.",
+  },
+  {
+    sig: "AlreadyRegistered()",
+    params: "",
+    explain: () => "This wallet is already registered as an agent.",
+  },
+  {
+    sig: "NotAuthority()",
+    params: "",
+    explain: () => "Only the registry authority can do this.",
+  },
+  {
+    sig: "EmptyHandle()",
+    params: "",
+    explain: () => "The agent handle cannot be empty.",
+  },
+];
+
+const ERROR_BY_SELECTOR: Record<string, (args: ethers.Result) => string> = {};
+const PARAMS_BY_SELECTOR: Record<string, string> = {};
+for (const e of KNOWN_ERRORS) {
+  const sel = ethers.id(e.sig).slice(0, 10).toLowerCase();
+  ERROR_BY_SELECTOR[sel] = e.explain;
+  PARAMS_BY_SELECTOR[sel] = e.params;
+}
+
+// ethers nests revert data differently for an estimate-gas failure, a send
+// failure, and a wallet RPC failure, so walk the error object and keep every
+// hex string that could be calldata.
+function candidateRevertData(e: unknown): string[] {
+  const out: string[] = [];
+  const walk = (v: unknown, depth: number) => {
+    if (v == null || depth > 5) return;
+    if (typeof v === "string") {
+      // "0x" is a revert with no data at all — too short for a selector, but
+      // worth recognising so we can say "no reason given" instead of nothing.
+      if (v === "0x" || (v.startsWith("0x") && v.length >= 10))
+        out.push(v.toLowerCase());
+      return;
+    }
+    if (typeof v === "object") {
+      for (const k of Object.keys(v as Record<string, unknown>)) {
+        // Transaction hashes look like calldata but explain nothing.
+        if (/hash/i.test(k)) continue;
+        walk((v as Record<string, unknown>)[k], depth + 1);
+      }
+    }
+  };
+  walk(e, 0);
+  return out;
+}
+
+/**
+ * Turn a transaction failure into one sentence a person can act on. Contract
+ * reverts are decoded against the deployed ABIs; wallet-level problems (user
+ * dismissed the signature, no gas money) are recognised by their error codes.
+ */
+export function describeError(e: unknown): string {
+  const err = e as Record<string, unknown> | null;
+  const code = (err?.code ?? (err?.info as any)?.error?.code) as
+    | string
+    | number
+    | undefined;
+
+  // The user closed the wallet prompt. Not a failure of anything.
+  if (code === 4001 || code === "ACTION_REJECTED") {
+    return "You dismissed the signature in your wallet — nothing was sent. Try again when you are ready.";
+  }
+
+  // A second wallet prompt is still open; browsers only allow one at a time.
+  if (code === -32002) {
+    return "Your wallet is already waiting for you to approve a request. Open it and finish that one first.";
+  }
+
+  if (code === "INSUFFICIENT_FUNDS" || code === -32000) {
+    return "This wallet does not have enough USDC to cover the gas fee. Gas on Arc is paid in native USDC — top the wallet up and retry.";
+  }
+
+  // A real revert: find the first candidate that decodes to a known selector.
+  for (const data of candidateRevertData(e)) {
+    const sel = data.slice(0, 10);
+    const explain = ERROR_BY_SELECTOR[sel];
+    if (explain) {
+      const params = PARAMS_BY_SELECTOR[sel];
+      try {
+        const args = params
+          ? ethers.AbiCoder.defaultAbiCoder().decode(
+              params.split(","),
+              "0x" + data.slice(10)
+            )
+          : ([] as unknown as ethers.Result);
+        return explain(args);
+      } catch {
+        return explain([] as unknown as ethers.Result);
+      }
+    }
+    if (data === "0x") {
+      return "The contract refused this call but did not give a reason.";
+    }
+  }
+
+  if (err?.reason && typeof err.reason === "string") return err.reason;
+  if (err?.shortMessage && typeof err.shortMessage === "string")
+    return err.shortMessage;
+  if (err?.message && typeof err.message === "string") return err.message;
+  return "Unknown error — check the explorer or try again.";
+}
