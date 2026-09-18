@@ -1,4 +1,3 @@
-◇ injected env (4) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
 // Sources flattened with hardhat v3.16.0 https://hardhat.org
 
 // SPDX-License-Identifier: MIT
