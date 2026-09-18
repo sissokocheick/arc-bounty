@@ -45,6 +45,7 @@ export default function Home() {
   const [proofFor, setProofFor] = useState<string>("");
   const [lastTx, setLastTx] = useState<string>("");
   const [hasWallet, setHasWallet] = useState(true);
+  const [readError, setReadError] = useState<string>("");
 
   const needConfig = !BOARD;
 
@@ -57,8 +58,9 @@ export default function Home() {
     try {
       const all = (await readWithRetry(() => c.getAllTasks())) as Task[];
       setTasks([...all].reverse());
-    } catch {
-      /* the RPC let us down; the previous list is stale but still visible */
+      setReadError("");
+    } catch (e: any) {
+      setReadError(e?.reason || e?.message || "Could not reach the Arc RPC");
     }
   }, []);
 
@@ -264,6 +266,19 @@ export default function Home() {
             <span className="font-medium">Read-only mode.</span> You're viewing
             live mainnet data without a wallet — installing one (MetaMask) lets
             you post tasks, submit work and spend from a vault.
+          </div>
+        )}
+
+        {readError && (
+          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span className="font-medium">
+              The chain is unreachable right now.
+            </span>{" "}
+            Arc's public RPC refused the request after several retries. The data
+            below may be stale.
+            <pre className="mt-2 text-[11px] text-amber-700 whitespace-pre-wrap break-all">
+              {readError}
+            </pre>
           </div>
         )}
 
