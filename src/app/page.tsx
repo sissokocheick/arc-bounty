@@ -103,11 +103,28 @@ export default function Home() {
     try {
       setLoading(true);
       const t = await fn();
-      const r = await t.wait();
-      if (!r) throw new Error("Transaction was dropped — no receipt");
-      setLastTx(r.hash);
+      // From here on the transaction is signed and broadcast. Confirm it through
+      // the *public* Arc RPC rather than the wallet's own RPC — wallets poll
+      // receipts through their own nodes, and those are the flaky part. If the
+      // public RPC has not indexed the block yet, fall back to the wallet.
+      let receipt = null as ethers.TransactionReceipt | null;
+      try {
+        receipt = await getReadProvider().getTransactionReceipt(t.hash);
+        if (!receipt) {
+          receipt = await new ethers.BrowserProvider(getEip1193()!).getTransactionReceipt(t.hash);
+        }
+      } catch {
+        /* could not confirm — still not a failed transaction */
+      }
+      setLastTx(t.hash);
       await refresh();
-      alert(`${ok}\n\nSee it on the explorer:\n${explorerTx(r.hash)}`);
+      alert(
+        receipt
+          ? `${ok}\n\nSee it on the explorer:\n${explorerTx(t.hash)}`
+          : `Sent — but I could not confirm it from the browser.\n\n` +
+              `Check it here:\n${explorerTx(t.hash)}\n\n` +
+              `If it says success, your change is already on-chain.`
+      );
     } catch (e: any) {
       alert("Transaction failed: " + (e?.reason || e?.message || "unknown"));
     } finally {
