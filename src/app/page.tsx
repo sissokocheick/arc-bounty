@@ -349,7 +349,7 @@ export default function Home() {
           ) : (
             <Skeleton lines={3} />
           ))}
-        {tab === "Agent vault" && <VaultTab />}
+        {tab === "Agent vault" && <VaultTab account={account} />}
         {tab === "Agents" && <AgentsTab />}
       </main>
 
@@ -677,7 +677,7 @@ function Field({
 
 /* ------------------------------------------------------------------ Vault */
 
-function VaultTab() {
+function VaultTab({ account }: { account: string }) {
   const toast = useToast();
   const [state, setState] = useState<any>(null);
   const [error, setError] = useState<string>("");
@@ -805,6 +805,15 @@ function VaultTab() {
       </div>
     );
 
+  // Every action on this tab is owner-gated. The chain already told us who the
+  // owner is, so we know whether the connected wallet can act BEFORE asking it
+  // to sign — a wallet that is not the owner returns a shapeless "missing
+  // revert data" error, which explains nothing to anyone.
+  const amOwner =
+    !!account &&
+    !!state.owner &&
+    account.toLowerCase() === state.owner.toLowerCase();
+
   const cap = ethers.formatEther(state.policy.perSpendCap);
   const budget = ethers.formatEther(state.policy.dailyBudget);
   const remaining = ethers.formatEther(state.remaining);
@@ -880,24 +889,41 @@ function VaultTab() {
           </div>
         </div>
 
+        {account && !amOwner && (
+          <div className="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-800">
+            <p className="font-semibold mb-0.5">Read-only — you are not the owner</p>
+            <p className="leading-relaxed">
+              Connected as <span className="font-mono">{short(account)}</span>, but this
+              vault is owned by{" "}
+              <span className="font-mono">{short(state.owner)}</span>. Funding,
+              withdrawing, pausing and editing the policy all revert for anyone else,
+              so the buttons below are disabled. The agent&rsquo;s own key can still
+              spend inside the policy.
+            </p>
+          </div>
+        )}
+
         <div className="mt-6 flex flex-wrap gap-2">
           <button
             onClick={() => setFundOpen(true)}
-            disabled={loading}
+            disabled={loading || !amOwner}
+            title={amOwner ? "" : "Only the vault owner can fund it"}
             className="text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
           >
             Fund vault
           </button>
           <button
             onClick={() => run("withdrawAll", "Withdrawn to owner")}
-            disabled={loading}
+            disabled={loading || !amOwner}
+            title={amOwner ? "" : "Only the vault owner can withdraw"}
             className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
           >
             Withdraw all
           </button>
           <button
             onClick={() => run("setPaused", "Vault paused", !state.policy.paused)}
-            disabled={loading}
+            disabled={loading || !amOwner}
+            title={amOwner ? "" : "Only the vault owner can pause the agent"}
             className="text-sm font-medium px-3 py-1.5 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
           >
             {state.policy.paused ? "Unpause" : "Pause agent"}
@@ -941,15 +967,11 @@ function VaultTab() {
               const c = (document.getElementById("cap") as HTMLInputElement).value;
               const b = (document.getElementById("budget") as HTMLInputElement).value;
               const w = (document.getElementById("wl") as HTMLInputElement).checked;
-              run(
-                "setPolicy",
-                "Policy updated",
-                ethers.parseEther(c || "0"),
-                ethers.parseEther(b || "0"),
-                w
-              );
+              const amt = (v: string) => ethers.parseEther(v.trim().replace(",", ".") || "0");
+              run("setPolicy", "Policy updated", amt(c), amt(b), w);
             }}
-            disabled={loading}
+            disabled={loading || !amOwner}
+            title={amOwner ? "" : "Only the vault owner can change the policy"}
             className="w-full py-2.5 rounded-lg bg-slate-900 text-white font-medium hover:bg-slate-700 disabled:opacity-50"
           >
             Apply policy
@@ -972,7 +994,8 @@ function VaultTab() {
                   true
                 )
               }
-              disabled={loading}
+              disabled={loading || !amOwner}
+              title={amOwner ? "" : "Only the vault owner can whitelist a recipient"}
               className="shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
             >
               Allow
@@ -1021,7 +1044,8 @@ function VaultTab() {
         </div>
         <button
           onClick={doFund}
-          disabled={loading || !Number(fundAmt)}
+          disabled={loading || !amOwner || !Number(fundAmt)}
+          title={amOwner ? "" : "Only the vault owner can fund it"}
           className="mt-4 w-full py-2.5 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? "Confirm in wallet…" : `Fund ${Number(fundAmt) || 0} USDC`}
