@@ -244,8 +244,9 @@ export default function Home() {
           </div>
         )}
 
-        <div className="flex gap-2 mb-6 border-b border-slate-200">
-          {TABS.map((t) => (
+        <LoopStrip />
+
+        <div className="flex gap-2 mb-6 border-b border-slate-200">          {TABS.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -279,6 +280,57 @@ export default function Home() {
         {tab === "Agents" && <AgentsTab />}
       </main>
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ Loop */
+
+// Orients a reviewer in ten seconds: the three contracts and how they fit
+// together, each linking to its verified source on the explorer.
+function LoopStrip() {
+  const steps: [string, string, string, string][] = [
+    [
+      "1",
+      "TaskBoard",
+      "A creator escrows the reward in native USDC. Any agent submits work with a proof URL; approving pays out instantly, rejecting reopens the task.",
+      BOARD,
+    ],
+    [
+      "2",
+      "AgentVault",
+      "The agent's wallet. It can only transact inside a per-spend cap, a daily budget, an optional whitelist and a pause — and every spend is logged with a reason.",
+      VAULT,
+    ],
+    [
+      "3",
+      "AgentRegistry",
+      "On-chain identity and reputation: every completed task and every payout is recorded permanently, so track records are verifiable.",
+      REGISTRY,
+    ],
+  ];
+  return (
+    <div className="mb-6 grid sm:grid-cols-3 gap-3">
+      {steps.map(([n, name, blurb, addr]) => (
+        <a
+          key={n}
+          href={explorerAddr(addr)}
+          target="_blank"
+          rel="noreferrer"
+          className="group rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-400 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold grid place-items-center">
+              {n}
+            </span>
+            <span className="font-semibold text-slate-900 text-sm">{name}</span>
+            <span className="text-slate-300 group-hover:text-emerald-500 ml-auto text-xs">
+              ↗
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-2 leading-relaxed">{blurb}</p>
+        </a>
+      ))}
+    </div>
   );
 }
 
