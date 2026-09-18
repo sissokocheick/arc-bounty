@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ethers } from "ethers";
 import Header from "@/components/Header";
+import { Modal, Skeleton, useToast } from "@/components/ui";
 import {
   AGENTLY_ABI,
   ARC_CHAIN_ID,
@@ -38,14 +39,17 @@ const TABS = ["Tasks", "Agent vault", "Agents"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function Home() {
+  const toast = useToast();
   const [tab, setTab] = useState<Tab>("Tasks");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [account, setAccount] = useState("");
-  const [proofFor, setProofFor] = useState<string>("");
   const [lastTx, setLastTx] = useState<string>("");
   const [hasWallet, setHasWallet] = useState(true);
   const [readError, setReadError] = useState<string>("");
+  const [proofModal, setProofModal] = useState<bigint | null>(null);
+  const [proofInput, setProofInput] = useState("");
+  const [tasksLoaded, setTasksLoaded] = useState(false);
 
   const needConfig = !BOARD;
 
@@ -60,6 +64,7 @@ export default function Home() {
       );
       setTasks([...(all as Task[])].reverse());
       setReadError("");
+      setTasksLoaded(true);
     } catch (e: any) {
       setReadError(e?.reason || e?.message || "Could not reach the Arc RPC");
     }
@@ -126,18 +131,28 @@ export default function Home() {
       }
       setLastTx(t.hash);
       await refresh();
-      alert(
-        receipt
-          ? `${ok}\n\nSee it on the explorer:\n${explorerTx(t.hash)}`
-          : `Sent — but I could not confirm it from the browser.\n\n` +
-              `Check it here:\n${explorerTx(t.hash)}\n\n` +
-              `If it says success, your change is already on-chain.`
-      );
+      if (receipt) {
+        toast.push({
+          kind: "success",
+          title: ok,
+          href: explorerTx(t.hash),
+        });
+      } else {
+        toast.push({
+          kind: "info",
+          title: "Sent — unconfirmed",
+          body: "The transaction is on the network but the browser could not confirm it yet. If the explorer says success, your change is already on-chain.",
+          href: explorerTx(t.hash),
+        });
+      }
     } catch (e: any) {
-      alert("Transaction failed: " + (e?.reason || e?.message || "unknown"));
+      toast.push({
+        kind: "error",
+        title: "Transaction failed",
+        body: e?.reason || e?.message || "unknown error",
+      });
     } finally {
       setLoading(false);
-      setProofFor("");
     }
   }
 
@@ -164,8 +179,25 @@ export default function Home() {
   }
 
   async function submitWork(id: bigint) {
-    const url = window.prompt("Proof URL (GitHub PR, Figma link, agent output):");
-    if (!url) return;
+    // Open the modal instead of window.prompt — the native one is unstyled,
+    // unvalidatable, and blocks the page.
+    setProofInput("");
+    setProofModal(id);
+  }
+
+  async function confirmSubmitWork() {
+    const id = proofModal;
+    const url = proofInput.trim();
+    if (id === null) return;
+    if (!/^https?:\/\//i.test(url)) {
+      toast.push({
+        kind: "error",
+        title: "Proof must be a URL",
+        body: "Paste a link starting with http:// or https://.",
+      });
+      return;
+    }
+    setProofModal(null);
     const signer = await getSigner();
     const c = new ethers.Contract(BOARD, AGENTLY_ABI, signer);
     await tx(() => c.submitWork(id, url), "Work submitted for review");
@@ -300,24 +332,54 @@ export default function Home() {
           ))}
         </div>
 
-        {tab === "Tasks" && (
-          <TasksTab
-            tasks={tasks}
-            account={account}
-            loading={loading}
-            hasWallet={hasWallet}
-            onSubmit={submitWork}
-            onApprove={approve}
-            onReject={reject}
-            onCancel={cancel}
-            onCreate={createTask}
-            proofFor={proofFor}
-            setProofFor={setProofFor}
-          />
-        )}
+        {tab === "Tasks" &&
+          (tasksLoaded ? (
+            <TasksTab
+              tasks={tasks}
+              account={account}
+              loading={loading}
+              hasWallet={hasWallet}
+              onSubmit={submitWork}
+              onApprove={approve}
+              onReject={reject}
+              onCancel={cancel}
+              onCreate={createTask}
+            />
+          ) : (
+            <Skeleton lines={3} />
+          ))}
         {tab === "Agent vault" && <VaultTab />}
         {tab === "Agents" && <AgentsTab />}
       </main>
+
+      <Modal
+        open={proofModal !== null}
+        onClose={() => setProofModal(null)}
+        title="Submit work"
+      >
+        <p className="text-sm text-slate-500 -mt-2 mb-4">
+          Link to the proof — a GitHub PR, a Figma file, an agent output. The
+          task creator reviews this and approves payout in USDC.
+        </p>
+        <input
+          autoFocus
+          type="url"
+          value={proofInput}
+          onChange={(e) => setProofInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") confirmSubmitWork();
+          }}
+          placeholder="https://github.com/…/pull/42"
+          className={inputCls}
+        />
+        <button
+          onClick={confirmSubmitWork}
+          disabled={loading || !proofInput.trim()}
+          className="mt-4 w-full py-2.5 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? "Submitting…" : "Submit for review"}
+        </button>
+      </Modal>
     </>
   );
 }
@@ -385,8 +447,6 @@ function TasksTab(props: {
   onReject: (id: bigint) => void;
   onCancel: (id: bigint) => void;
   onCreate: (e: React.FormEvent) => void;
-  proofFor: string;
-  setProofFor: (s: string) => void;
 }) {
   const { tasks, account } = props;
   const open = tasks.filter((t) => !t.completed && !t.cancelled);
@@ -616,10 +676,12 @@ function Field({
 /* ------------------------------------------------------------------ Vault */
 
 function VaultTab() {
+  const toast = useToast();
   const [state, setState] = useState<any>(null);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [fundAmt, setFundAmt] = useState("10");
+  const [fundAmt, setFundAmt] = useState("0.05");
+  const [fundOpen, setFundOpen] = useState(false);
 
   async function load() {
     if (!VAULT) return;
@@ -655,6 +717,16 @@ function VaultTab() {
     return () => clearInterval(id);
   }, []);
 
+  function doFund() {
+    const v = String(fundAmt || "").trim();
+    if (!v || Number(v) <= 0) {
+      toast.push({ kind: "error", title: "Enter an amount", body: "The fund amount must be greater than 0." });
+      return;
+    }
+    setFundOpen(false);
+    run("fund", "Vault funded", { value: ethers.parseEther(v) });
+  }
+
   async function run(fn: string, label: string, ...args: any[]) {
     try {
       setLoading(true);
@@ -674,14 +746,23 @@ function VaultTab() {
       } catch {
         /* unconfirmed, not failed */
       }
-      alert(
-        receipt
-          ? `${label}\n\n${explorerTx(t.hash)}`
-          : `Sent — but I could not confirm it from the browser.\n\nCheck it here:\n${explorerTx(t.hash)}`
-      );
+      if (receipt) {
+        toast.push({ kind: "success", title: label, href: explorerTx(t.hash) });
+      } else {
+        toast.push({
+          kind: "info",
+          title: "Sent — unconfirmed",
+          body: "Check the explorer: if it says success, the change is already on-chain.",
+          href: explorerTx(t.hash),
+        });
+      }
       await load();
     } catch (e: any) {
-      alert("Failed: " + (e?.reason || e?.message));
+      toast.push({
+        kind: "error",
+        title: "Action failed",
+        body: e?.reason || e?.message || "unknown error",
+      });
     } finally {
       setLoading(false);
     }
@@ -702,7 +783,24 @@ function VaultTab() {
         </button>
       </div>
     ) : (
-      <p className="text-sm text-slate-500">Loading vault…</p>
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="h-5 w-1/4 rounded bg-slate-100 animate-pulse" />
+          <div className="mt-6 grid grid-cols-2 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-16 rounded-lg bg-slate-50 border border-slate-100 animate-pulse" />
+            ))}
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="h-5 w-1/3 rounded bg-slate-100 animate-pulse" />
+          <div className="mt-6 space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-10 rounded-lg bg-slate-50 animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </div>
     );
 
   const cap = ethers.formatEther(state.policy.perSpendCap);
@@ -782,15 +880,9 @@ function VaultTab() {
 
         <div className="mt-6 flex flex-wrap gap-2">
           <button
-            onClick={() => {
-              const v = prompt("Fund amount in USDC:", fundAmt);
-              if (v) {
-                setFundAmt(v);
-                run("fund", "Vault funded", { value: ethers.parseEther(v) });
-              }
-            }}
+            onClick={() => setFundOpen(true)}
             disabled={loading}
-            className="text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+            className="text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
           >
             Fund vault
           </button>
@@ -886,6 +978,53 @@ function VaultTab() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={fundOpen}
+        onClose={() => setFundOpen(false)}
+        title="Fund the agent vault"
+      >
+        <p className="text-sm text-slate-500 -mt-2 mb-4">
+          The vault is the agent's spending account. Anything you put here is
+          bounded by the policy above — the agent can never spend past the cap
+          or the daily budget, and only whitelisted recipients if enabled.
+        </p>
+        <label className="block">
+          <span className="block text-xs font-medium text-slate-600 mb-1">
+            Amount (USDC)
+          </span>
+          <input
+            autoFocus
+            type="number"
+            step="0.001"
+            min="0.001"
+            value={fundAmt}
+            onChange={(e) => setFundAmt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") doFund();
+            }}
+            className={inputCls}
+          />
+        </label>
+        <div className="mt-2 flex gap-2">
+          {["0.05", "0.1", "1"].map((v) => (
+            <button
+              key={v}
+              onClick={() => setFundAmt(v)}
+              className="text-xs px-2.5 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={doFund}
+          disabled={loading || !Number(fundAmt)}
+          className="mt-4 w-full py-2.5 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? "Confirm in wallet…" : `Fund ${Number(fundAmt) || 0} USDC`}
+        </button>
+      </Modal>
     </div>
   );
 }
@@ -904,6 +1043,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 /* --------------------------------------------------------------- Agents */
 
 function AgentsTab() {
+  const toast = useToast();
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -948,14 +1088,27 @@ function AgentsTab() {
       } catch {
         /* unconfirmed, not failed */
       }
-      alert(
-        receipt
-          ? `Agent registered on Arc\n\n${explorerTx(t.hash)}`
-          : `Sent — but I could not confirm it from the browser.\n\nCheck it here:\n${explorerTx(t.hash)}`
-      );
+      if (receipt) {
+        toast.push({
+          kind: "success",
+          title: "Agent registered on Arc",
+          href: explorerTx(t.hash),
+        });
+      } else {
+        toast.push({
+          kind: "info",
+          title: "Sent — unconfirmed",
+          body: "Check the explorer: if it says success, the agent is registered.",
+          href: explorerTx(t.hash),
+        });
+      }
       load();
     } catch (e: any) {
-      alert("Failed: " + (e?.reason || e?.message));
+      toast.push({
+        kind: "error",
+        title: "Registration failed",
+        body: e?.reason || e?.message || "unknown error",
+      });
     } finally {
       setLoading(false);
     }
