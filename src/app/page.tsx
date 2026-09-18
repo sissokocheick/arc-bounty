@@ -11,6 +11,7 @@ import {
   fmt,
   getReadContract,
   getReadProvider,
+  readWithRetry,
   short,
 } from "@/utils/contract";
 import { getEip1193, getProviders } from "@/utils/providers";
@@ -53,8 +54,12 @@ export default function Home() {
   const read = useCallback(async () => {
     if (!BOARD) return;
     const c = getReadContract(BOARD);
-    const all = (await c.getAllTasks()) as Task[];
-    setTasks([...all].reverse());
+    try {
+      const all = (await readWithRetry(() => c.getAllTasks())) as Task[];
+      setTasks([...all].reverse());
+    } catch {
+      /* the RPC let us down; the previous list is stale but still visible */
+    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -596,6 +601,7 @@ function Field({
 
 function VaultTab() {
   const [state, setState] = useState<any>(null);
+  const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [fundAmt, setFundAmt] = useState("10");
 
@@ -604,25 +610,24 @@ function VaultTab() {
     // Public RPC — works with no wallet installed.
     const c = getReadContract(VAULT);
     const provider = getReadProvider();
-    const [owner, agent, policy, totalSpent, spendCount, remaining, balance] =
-      await Promise.all([
-        c.owner(),
-        c.agent(),
-        c.policy(),
-        c.totalSpent(),
-        c.spendCount(),
-        c.dailyRemaining(),
-        provider.getBalance(VAULT),
-      ]);
-    setState({
-      owner,
-      agent,
-      policy,
-      totalSpent,
-      spendCount,
-      remaining,
-      balance,
-    });
+    try {
+      const [owner, agent, policy, totalSpent, spendCount, remaining, balance] =
+        await readWithRetry(() =>
+          Promise.all([
+            c.owner(),
+            c.agent(),
+            c.policy(),
+            c.totalSpent(),
+            c.spendCount(),
+            c.dailyRemaining(),
+            provider.getBalance(VAULT),
+          ])
+        );
+      setState({ owner, agent, policy, totalSpent, spendCount, remaining, balance });
+      setError("");
+    } catch (e: any) {
+      setError(e?.reason || e?.message || "Could not reach the Arc RPC");
+    }
   }
 
   useEffect(() => {
@@ -644,8 +649,21 @@ function VaultTab() {
       const s = await provider.getSigner();
       const c = new ethers.Contract(VAULT, AGENTLY_ABI, s);
       const t = await c[fn](...args);
-      const r = await t.wait();
-      alert(`${label}\n\n${explorerTx(r.hash)}`);
+      // Confirm on the public RPC — same reason as tx(): the wallet's own
+      // receipt poll is the flaky part, not the transaction.
+      let receipt = null as ethers.TransactionReceipt | null;
+      try {
+        receipt = await getReadProvider().getTransactionReceipt(t.hash);
+        if (!receipt)
+          receipt = await provider.getTransactionReceipt(t.hash);
+      } catch {
+        /* unconfirmed, not failed */
+      }
+      alert(
+        receipt
+          ? `${label}\n\n${explorerTx(t.hash)}`
+          : `Sent — but I could not confirm it from the browser.\n\nCheck it here:\n${explorerTx(t.hash)}`
+      );
       await load();
     } catch (e: any) {
       alert("Failed: " + (e?.reason || e?.message));
@@ -654,7 +672,23 @@ function VaultTab() {
     }
   }
 
-  if (!state) return <p className="text-sm text-slate-500">Loading vault…</p>;
+  if (!state)
+    return error ? (
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-6 text-sm text-amber-800">
+        <p className="font-semibold mb-1">Could not load the vault.</p>
+        <p className="text-xs text-amber-700 mb-3">
+          Arc's public RPC refused the request after several retries: {error}
+        </p>
+        <button
+          onClick={load}
+          className="text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-400 hover:bg-amber-100"
+        >
+          Try again
+        </button>
+      </div>
+    ) : (
+      <p className="text-sm text-slate-500">Loading vault…</p>
+    );
 
   const cap = ethers.formatEther(state.policy.perSpendCap);
   const budget = ethers.formatEther(state.policy.dailyBudget);
@@ -861,7 +895,7 @@ function AgentsTab() {
   async function load() {
     if (!REGISTRY) return;
     // Public RPC — works with no wallet installed.
-    setAgents(await getReadContract(REGISTRY).getAllAgents());
+    setAgents(await readWithRetry(() => getReadContract(REGISTRY).getAllAgents()));
   }
 
   useEffect(() => {
@@ -884,8 +918,19 @@ function AgentsTab() {
         String(f.get("meta") || "ipfs://"),
         VAULT || ethers.ZeroAddress
       );
-      const r = await t.wait();
-      alert(`Agent registered on Arc\n\n${explorerTx(r.hash)}`);
+      let receipt = null as ethers.TransactionReceipt | null;
+      try {
+        receipt = await getReadProvider().getTransactionReceipt(t.hash);
+        if (!receipt)
+          receipt = await provider.getTransactionReceipt(t.hash);
+      } catch {
+        /* unconfirmed, not failed */
+      }
+      alert(
+        receipt
+          ? `Agent registered on Arc\n\n${explorerTx(t.hash)}`
+          : `Sent — but I could not confirm it from the browser.\n\nCheck it here:\n${explorerTx(t.hash)}`
+      );
       load();
     } catch (e: any) {
       alert("Failed: " + (e?.reason || e?.message));

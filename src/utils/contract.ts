@@ -69,6 +69,30 @@ export function getReadContract(address: string) {
   return new ethers.Contract(address, AGENTLY_ABI, getReadProvider());
 }
 
+/**
+ * Arc's public RPC drops roughly 1 call in 20 at random — no revert data, no
+ * rate-limit code, just a transient node error that succeeds on retry. Without
+ * a retry every dashboard read can fail on a single bad draw and leave a tab
+ * stuck on "Loading…". Retrying turns a broken page into an invisible blip.
+ */
+export async function readWithRetry<T>(
+  fn: () => Promise<T>,
+  attempts = 5
+): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+      }
+    }
+  }
+  throw last;
+}
+
 export function explorerTx(hash: string): string {
   return `${ARC_EXPLORER}/tx/${hash}`;
 }
