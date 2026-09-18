@@ -12,6 +12,16 @@ export const ARC_TESTNET_CHAIN_ID = 5042002;
 export const ARC_RPC = "https://rpc.mainnet.arc.io";
 export const ARC_EXPLORER = "https://explorer.arc.io";
 
+// Arc publishes several equivalent public endpoints. The primary one drops
+// roughly 1 request in 20 at random; the rest are keyless and answer the same
+// chain. Reads try them in order so one bad node can't take the dashboard down.
+const RPC_ENDPOINTS = [
+  "https://rpc.mainnet.arc.io",
+  "https://rpc.blockdaemon.mainnet.arc.io",
+  "https://rpc.drpc.mainnet.arc.io",
+  "https://rpc.quicknode.mainnet.arc.io",
+];
+
 export const AGENTLY_ABI = [
   // TaskBoard
   "function postTask(string _title, string _description, uint256 _deadline) payable",
@@ -56,17 +66,17 @@ export const AGENTLY_ABI = [
 ];
 
 /**
- * Read provider against the public Arc RPC. CORS is open on rpc.mainnet.arc.io,
+ * Read provider against the public Arc RPC. CORS is open on these endpoints,
  * so this works in any browser — no wallet extension required. Reads must NEVER
  * go through window.ethereum, or the dashboard looks empty to anyone who hasn't
  * installed MetaMask.
  */
-export function getReadProvider() {
-  return new ethers.JsonRpcProvider(ARC_RPC);
+export function getReadProvider(index = 0) {
+  return new ethers.JsonRpcProvider(RPC_ENDPOINTS[index % RPC_ENDPOINTS.length]);
 }
 
-export function getReadContract(address: string) {
-  return new ethers.Contract(address, AGENTLY_ABI, getReadProvider());
+export function getReadContract(address: string, provider: ethers.JsonRpcProvider) {
+  return new ethers.Contract(address, AGENTLY_ABI, provider);
 }
 
 /**
@@ -74,23 +84,49 @@ export function getReadContract(address: string) {
  * rate-limit code, just a transient node error that succeeds on retry. Without
  * a retry every dashboard read can fail on a single bad draw and leave a tab
  * stuck on "Loading…". Retrying turns a broken page into an invisible blip.
+ *
+ * A read that keeps failing rotates to a different RPC endpoint and retries
+ * there, because a whole region can draw a bad node and no amount of retrying
+ * the same one will help.
  */
 export async function readWithRetry<T>(
-  fn: () => Promise<T>,
-  attempts = 5
+  fn: (provider: ethers.JsonRpcProvider) => Promise<T>,
+  attempts = 4
 ): Promise<T> {
   let last: unknown;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      last = e;
-      if (i < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+  for (let round = 0; round < RPC_ENDPOINTS.length; round++) {
+    const provider = new ethers.JsonRpcProvider(RPC_ENDPOINTS[round]);
+    for (let i = 0; i < attempts; i++) {
+      try {
+        return await fn(provider);
+      } catch (e) {
+        last = e;
+        if (i < attempts - 1) {
+          await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+        }
       }
     }
   }
   throw last;
+}
+
+/**
+ * Look up a receipt across every Arc endpoint. The transaction is already
+ * signed and broadcast by the time this runs, so returning null is never a
+ * failure — it just means "check the explorer".
+ */
+export async function getReceiptAny(
+  hash: string
+): Promise<ethers.TransactionReceipt | null> {
+  for (let i = 0; i < RPC_ENDPOINTS.length; i++) {
+    try {
+      const r = await getReadProvider(i).getTransactionReceipt(hash);
+      if (r) return r;
+    } catch {
+      /* try the next endpoint */
+    }
+  }
+  return null;
 }
 
 export function explorerTx(hash: string): string {
