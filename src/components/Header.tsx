@@ -3,21 +3,39 @@
 import { useEffect, useState } from "react";
 import { ethers } from "ethers";
 import { ARC_CHAIN_ID, ARC_RPC } from "@/utils/contract";
+import { getProviders, getEip1193, setChosenProvider, type ProviderEntry } from "@/utils/providers";
+
+const ARC_NETWORK_PARAMS = {
+  chainId: "0x13B2",
+  chainName: "Arc",
+  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+  rpcUrls: [ARC_RPC],
+  blockExplorerUrls: ["https://explorer.arc.io"],
+};
 
 export default function Header() {
   const [account, setAccount] = useState<string>("");
   const [chainOk, setChainOk] = useState(false);
   const [balance, setBalance] = useState<string>("");
+  const [picker, setPicker] = useState<ProviderEntry[] | null>(null);
+  const [provider, setProvider] = useState<any>(null);
+
+  useEffect(() => {
+    // Pick the only installed wallet automatically, without prompting — the
+    // user still has to click Connect before anything can be signed.
+    const found = getProviders();
+    if (found.length === 1) setChosenProvider(found[0]);
+  }, []);
 
   async function refresh() {
-    if (!window.ethereum) return;
-    const provider = new ethers.BrowserProvider(window.ethereum!);
-    const network = await provider.getNetwork();
+    if (!provider) return;
+    const p = new ethers.BrowserProvider(provider);
+    const network = await p.getNetwork();
     setChainOk(Number(network.chainId) === ARC_CHAIN_ID);
-    const accounts = await provider.listAccounts();
+    const accounts = await p.listAccounts();
     if (accounts.length) {
       setAccount(accounts[0].address);
-      const bal = await provider.getBalance(accounts[0].address);
+      const bal = await p.getBalance(accounts[0].address);
       setBalance(ethers.formatEther(bal));
     } else {
       setAccount("");
@@ -27,48 +45,53 @@ export default function Header() {
 
   useEffect(() => {
     refresh();
-    if (window.ethereum) {
-      window.ethereum.on("accountsChanged", refresh);
-      window.ethereum.on("chainChanged", refresh);
+    if (provider) {
+      provider.on("accountsChanged", refresh);
+      provider.on("chainChanged", refresh);
     }
     return () => {
-      if (window.ethereum?.removeListener) {
-        window.ethereum.removeListener("accountsChanged", refresh);
-        window.ethereum.removeListener("chainChanged", refresh);
+      if (provider?.removeListener) {
+        provider.removeListener("accountsChanged", refresh);
+        provider.removeListener("chainChanged", refresh);
       }
     };
-  }, []);
+  }, [provider]);
 
-  async function connect() {
-    if (!window.ethereum) {
+  async function connectWith(entry: ProviderEntry) {
+    setPicker(null);
+    try {
+      await entry.provider.request({ method: "eth_requestAccounts" });
+      const p = new ethers.BrowserProvider(entry.provider);
+      const network = await p.getNetwork();
+      if (Number(network.chainId) !== ARC_CHAIN_ID) {
+        await entry.provider.request({
+          method: "wallet_addEthereumChain",
+          params: [ARC_NETWORK_PARAMS],
+        });
+      }
+      setChosenProvider(entry);
+      setProvider(entry.provider);
+    } catch {
+      /* user rejected */
+    }
+  }
+
+  function connect() {
+    const providers = getProviders();
+    if (providers.length === 0) {
       alert(
-        "No wallet detected. Install MetaMask and add the Arc network:\n" +
+        "No wallet detected. Install one (MetaMask, Phantom, Rabby) and add the Arc network:\n" +
           `RPC: ${ARC_RPC}\nChain ID: 5042\nExplorer: https://explorer.arc.io`
       );
       return;
     }
-    try {
-      await window.ethereum.request({ method: "eth_requestAccounts" });
-      const provider = new ethers.BrowserProvider(window.ethereum!);
-      const network = await provider.getNetwork();
-      if (Number(network.chainId) !== ARC_CHAIN_ID) {
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: "0x13B2",
-              chainName: "Arc",
-              nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-              rpcUrls: [ARC_RPC],
-              blockExplorerUrls: ["https://explorer.arc.io"],
-            },
-          ],
-        });
-      }
-      refresh();
-    } catch {
-      /* user rejected */
+    // Only one wallet installed: connect straight to it. Several: let the user
+    // choose, because we cannot guess which one holds their Arc USDC.
+    if (providers.length > 1) {
+      setPicker(providers);
+      return;
     }
+    connectWith(providers[0]);
   }
 
   return (
@@ -100,12 +123,36 @@ export default function Header() {
               {account.slice(0, 6)}…{account.slice(-4)}
             </code>
           ) : (
-            <button
-              onClick={connect}
-              className="text-sm font-medium px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-700 transition-colors"
-            >
-              Connect wallet
-            </button>
+            <div className="relative">
+              <button
+                onClick={connect}
+                className="text-sm font-medium px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-700 transition-colors"
+              >
+                Connect wallet
+              </button>
+              {picker && picker.length > 1 && (
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setPicker(null)}
+                  />
+                  <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden z-30">
+                    <p className="px-3 py-2 text-[11px] text-slate-500 border-b border-slate-100">
+                      {picker.length} wallets detected — pick one
+                    </p>
+                    {picker.map((p) => (
+                      <button
+                        key={p.rdns}
+                        onClick={() => connectWith(p)}
+                        className="w-full text-left px-3 py-2.5 text-sm text-slate-800 hover:bg-emerald-50 transition-colors"
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>

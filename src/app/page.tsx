@@ -13,6 +13,7 @@ import {
   getReadProvider,
   short,
 } from "@/utils/contract";
+import { getEip1193, getProviders } from "@/utils/providers";
 
 const BOARD = process.env.NEXT_PUBLIC_TASK_BOARD_ADDRESS || "";
 const VAULT = process.env.NEXT_PUBLIC_AGENT_VAULT_ADDRESS || "";
@@ -68,13 +69,13 @@ export default function Home() {
   useEffect(() => {
     read();
     // Wallet is only needed to sign transactions, never to read.
-    if (typeof window === "undefined" || !window.ethereum) {
+    if (!getEip1193()) {
       setHasWallet(false);
       return;
     }
     setHasWallet(true);
     (async () => {
-      const provider = new ethers.BrowserProvider(window.ethereum!);
+      const provider = new ethers.BrowserProvider(getEip1193()!);
       const network = await provider.getNetwork();
       if (Number(network.chainId) !== ARC_CHAIN_ID) return;
       const accs = await provider.listAccounts();
@@ -89,12 +90,12 @@ export default function Home() {
   }, [read]);
 
   async function getSigner() {
-    if (typeof window === "undefined" || !window.ethereum) {
+    if (!getEip1193()) {
       throw new Error(
         "No wallet detected. Install MetaMask and connect to Arc (chain 5042) to sign transactions."
       );
     }
-    const provider = new ethers.BrowserProvider(window.ethereum!);
+    const provider = new ethers.BrowserProvider(getEip1193()!);
     return await provider.getSigner();
   }
 
@@ -620,9 +621,9 @@ function VaultTab() {
   async function run(fn: string, label: string, ...args: any[]) {
     try {
       setLoading(true);
-      if (typeof window === "undefined" || !window.ethereum)
+      if (!getEip1193())
         throw new Error("No wallet detected. Install MetaMask to sign.");
-      const provider = new ethers.BrowserProvider(window.ethereum!);
+      const provider = new ethers.BrowserProvider(getEip1193()!);
       const s = await provider.getSigner();
       const c = new ethers.Contract(VAULT, AGENTLY_ABI, s);
       const t = await c[fn](...args);
@@ -854,10 +855,10 @@ function AgentsTab() {
     e.preventDefault();
     try {
       setLoading(true);
-      if (typeof window === "undefined" || !window.ethereum)
+      if (!getEip1193())
         throw new Error("No wallet detected. Install MetaMask to sign.");
       const f = new FormData(e.currentTarget as HTMLFormElement);
-      const provider = new ethers.BrowserProvider(window.ethereum!);
+      const provider = new ethers.BrowserProvider(getEip1193()!);
       const s = await provider.getSigner();
       const c = new ethers.Contract(REGISTRY, AGENTLY_ABI, s);
       const t = await c.register(
