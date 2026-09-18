@@ -506,7 +506,8 @@ function TasksTab(props: {
                   )}
                   {t.submitted && (
                     <span className="text-blue-600">
-                      proof pending review by {short(t.freelancer)}
+                      work submitted by {short(t.freelancer)} · awaiting the
+                      creator&rsquo;s review
                     </span>
                   )}
                 </div>
