@@ -7,6 +7,7 @@ import { useWallet } from "@/components/wallet";
 import { Modal, Skeleton, useToast } from "@/components/ui";
 import {
   AGENTLY_ABI,
+  VAULT_DEPLOY_ABI,
   explorerAddr,
   explorerTx,
   fmt,
@@ -16,6 +17,7 @@ import {
   readWithRetry,
   short,
 } from "@/utils/contract";
+import { AGENT_VAULT_BYTECODE } from "@/utils/vault-bytecode";
 
 const BOARD = process.env.NEXT_PUBLIC_TASK_BOARD_ADDRESS || "";
 const VAULT = process.env.NEXT_PUBLIC_AGENT_VAULT_ADDRESS || "";
@@ -728,12 +730,28 @@ function VaultTab({ account }: { account: string }) {
   const [fundAmt, setFundAmt] = useState("0.05");
   const [fundOpen, setFundOpen] = useState(false);
 
+  // A vault the backer deployed from this browser. The contract has no
+  // transferOwnership, so "make me the owner" means deploying a fresh vault —
+  // the owner is msg.sender, which is the connected wallet. Remembered locally
+  // so a refresh keeps showing their vault instead of the demo one.
+  const [myVault, setMyVault] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("agently:myVault") || "";
+  });
+  const vault = myVault || VAULT;
+
+  function useVault(addr: string) {
+    setMyVault(addr);
+    if (addr) window.localStorage.setItem("agently:myVault", addr);
+    else window.localStorage.removeItem("agently:myVault");
+  }
+
   async function load() {
-    if (!VAULT) return;
+    if (!vault) return;
     // Public RPC — works with no wallet installed.
     try {
       const data = await readWithRetry((p) => {
-        const c = getReadContract(VAULT, p);
+        const c = getReadContract(vault, p);
         return Promise.all([
           c.owner(),
           c.agent(),
@@ -741,7 +759,7 @@ function VaultTab({ account }: { account: string }) {
           c.totalSpent(),
           c.spendCount(),
           c.dailyRemaining(),
-          p.getBalance(VAULT),
+          p.getBalance(vault),
         ] as const);
       });
       const [owner, agent, policy, totalSpent, spendCount, remaining, balance] = data;
@@ -754,13 +772,13 @@ function VaultTab({ account }: { account: string }) {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [vault]);
 
   // Keep the vault numbers live while the tab sits open.
   useEffect(() => {
     const id = setInterval(() => load(), 20_000);
     return () => clearInterval(id);
-  }, []);
+  }, [vault]);
 
   function doFund() {
     const v = String(fundAmt || "").trim();
@@ -785,7 +803,7 @@ function VaultTab({ account }: { account: string }) {
         );
       const provider = new ethers.BrowserProvider(walletProvider);
       const s = await provider.getSigner();
-      const c = new ethers.Contract(VAULT, AGENTLY_ABI, s);
+      const c = new ethers.Contract(vault, AGENTLY_ABI, s);
       const t = await c[fn](...args);
       // Confirm on the public RPCs — same reason as tx(): the wallet's own
       // receipt poll is the flaky part, not the transaction.
@@ -812,6 +830,64 @@ function VaultTab({ account }: { account: string }) {
       toast.push({
         kind: "error",
         title: "Action failed",
+        body: describeError(e),
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Deploy a vault this wallet owns outright. The demo vault belongs to a key
+  // that leaked, and AgentVault has no transfer path, so this is the only way
+  // the backer gets a working vault of their own. The connected wallet signs,
+  // which makes it the owner — nothing secret ever leaves the extension.
+  async function deployVault() {
+    try {
+      setLoading(true);
+      if (!walletProvider)
+        throw new Error(
+          "No wallet detected. Connect a wallet on Arc (chain 5042) to deploy a vault."
+        );
+      if (!onArc)
+        throw new Error(
+          "Your wallet is on the wrong network. Switch to Arc (chain 5042) and try again."
+        );
+      const provider = new ethers.BrowserProvider(walletProvider);
+      const s = await provider.getSigner();
+      const agent = (document.getElementById("newagent") as HTMLInputElement)
+        .value;
+      const factory = new ethers.ContractFactory(
+        VAULT_DEPLOY_ABI,
+        AGENT_VAULT_BYTECODE,
+        s
+      );
+      const v = await factory.deploy(
+        agent || state.agent,
+        "ARC-1",
+      );
+      await v.waitForDeployment();
+      const addr = await v.getAddress();
+      // Re-wrap with the full ABI so the calls below are typed.
+      const typed = new ethers.Contract(addr, AGENTLY_ABI, s);
+      // Seed it with the demo policy so the agent is not sitting behind a zero
+      // budget on day one.
+      await typed.setPolicy(
+        ethers.parseEther("0.005"),
+        ethers.parseEther("0.05"),
+        true,
+      );
+      useVault(addr);
+      toast.push({
+        kind: "success",
+        title: "Vault deployed — you are the owner",
+        body: `${short(addr)} is live. Fund it and the agent can spend inside the policy.`,
+        href: explorerAddr(addr),
+      });
+      await load();
+    } catch (e: any) {
+      toast.push({
+        kind: "error",
+        title: "Deployment failed",
         body: describeError(e),
       });
     } finally {
@@ -877,6 +953,18 @@ function VaultTab({ account }: { account: string }) {
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-slate-900">Agent vault</h2>
+          {myVault && (
+            <button
+              onClick={() => {
+                useVault("");
+                setState(null);
+              }}
+              className="text-[11px] px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-medium hover:bg-blue-200 transition-colors"
+              title="Back to the demo vault"
+            >
+              showing your vault · view demo
+            </button>
+          )}
           {state.policy.paused ? (
             <span className="text-xs px-2 py-1 rounded-full bg-rose-100 text-rose-700 font-medium">
               paused
@@ -949,6 +1037,27 @@ function VaultTab({ account }: { account: string }) {
               so the buttons below are disabled. The agent&rsquo;s own key can still
               spend inside the policy.
             </p>
+            <p className="leading-relaxed mt-2">
+              A vault cannot be transferred to a new owner — deploy your own and the
+              connected wallet becomes it.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                id="newagent"
+                type="text"
+                defaultValue={state.agent}
+                placeholder="agent EOA"
+                className="font-mono text-xs px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-slate-700 w-56 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                title="The EOA the vault will let spend inside the policy"
+              />
+              <button
+                onClick={deployVault}
+                disabled={loading}
+                className="text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
+              >
+                Deploy my own vault
+              </button>
+            </div>
           </div>
         )}
 

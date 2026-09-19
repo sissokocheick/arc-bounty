@@ -65,6 +65,14 @@ export const AGENTLY_ABI = [
   "event Spent(uint256 index, address to, uint256 amount, string reason)",
 ];
 
+// Deploying a vault needs the constructor, which the read ABI deliberately
+// omits. Owner is whoever signs, so a backer becomes the owner by deploying —
+// no key ever changes hands.
+export const VAULT_DEPLOY_ABI = [
+  "constructor(address _agent, string _label)",
+  ...AGENTLY_ABI,
+];
+
 /**
  * Read provider against the public Arc RPC. CORS is open on these endpoints,
  * so this works in any browser — no wallet extension required. Reads must NEVER
