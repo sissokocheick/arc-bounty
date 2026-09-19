@@ -1,132 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ethers } from "ethers";
-import { ARC_CHAIN_ID, ARC_RPC } from "@/utils/contract";
-import { getProviders, getEip1193, setChosenProvider, type ProviderEntry } from "@/utils/providers";
+/**
+ * The account bar. Wallet state comes from the shared context — there is no
+ * local copy, so the page and the header can never disagree about who is
+ * connected the way they used to.
+ */
 
-const ARC_NETWORK_PARAMS = {
-  chainId: "0x13B2",
-  chainName: "Arc",
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-  rpcUrls: [ARC_RPC],
-  blockExplorerUrls: ["https://explorer.arc.io"],
-};
+import { useState } from "react";
+import {
+  useWallet,
+  ARC_NETWORK_PARAMS,
+} from "@/components/wallet";
+import type { ProviderEntry } from "@/utils/providers";
 
 export default function Header() {
-  const [account, setAccount] = useState<string>("");
-  const [chainOk, setChainOk] = useState(false);
-  const [balance, setBalance] = useState<string>("");
-  const [picker, setPicker] = useState<ProviderEntry[] | null>(null);
-  const [provider, setProvider] = useState<any>(null);
+  const w = useWallet();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  function forgetWallet() {
-    setChosenProvider(null);
-    setProvider(null);
-    setAccount("");
-    setBalance("");
-    setChainOk(false);
-  }
-
-  useEffect(() => {
-    // Pick the only installed wallet automatically, without prompting — the
-    // user still has to click Connect before anything can be signed.
-    const found = getProviders();
-    if (found.length === 1) setChosenProvider(found[0]);
-  }, []);
-
-  async function refresh() {
-    if (!provider) return;
-    const p = new ethers.BrowserProvider(provider);
-    const network = await p.getNetwork();
-    setChainOk(Number(network.chainId) === ARC_CHAIN_ID);
-    const accounts = await p.listAccounts();
-    if (accounts.length) {
-      setAccount(accounts[0].address);
-      const bal = await p.getBalance(accounts[0].address);
-      setBalance(ethers.formatEther(bal));
-    } else {
-      setAccount("");
-      setBalance("");
-    }
-  }
-
-  useEffect(() => {
-    refresh();
-    if (provider) {
-      provider.on("accountsChanged", refresh);
-      provider.on("chainChanged", refresh);
-    }
-    return () => {
-      if (provider?.removeListener) {
-        provider.removeListener("accountsChanged", refresh);
-        provider.removeListener("chainChanged", refresh);
-      }
-    };
-  }, [provider]);
-
-  async function connectWith(entry: ProviderEntry) {
-    setPicker(null);
-    try {
-      await entry.provider.request({ method: "eth_requestAccounts" });
-      const p = new ethers.BrowserProvider(entry.provider);
-      const network = await p.getNetwork();
-      if (Number(network.chainId) !== ARC_CHAIN_ID) {
-        await entry.provider.request({
-          method: "wallet_addEthereumChain",
-          params: [ARC_NETWORK_PARAMS],
-        });
-      }
-      setChosenProvider(entry);
-      setProvider(entry.provider);
-    } catch {
-      /* user rejected */
-    }
-  }
+  const [picker, setPicker] = useState<ProviderEntry[] | null>(null);
 
   function connect() {
-    const providers = getProviders();
-    if (providers.length === 0) {
+    if (w.providers.length === 0) {
       alert(
-        "No wallet detected. Install one (MetaMask, Phantom, Rabby) and add the Arc network:\n" +
-          `RPC: ${ARC_RPC}\nChain ID: 5042\nExplorer: https://explorer.arc.io`
+        "No wallet detected. Install one (MetaMask, Phantom, OKX) and add the Arc network:\n" +
+          "RPC: https://rpc.mainnet.arc.io\nChain ID: 5042\nExplorer: https://explorer.arc.io"
       );
       return;
     }
-    // Only one wallet installed: connect straight to it. Several: let the user
-    // choose, because we cannot guess which one holds their Arc USDC.
-    if (providers.length > 1) {
-      setPicker(providers);
+    if (w.providers.length > 1) {
+      setPicker(w.providers);
       return;
     }
-    connectWith(providers[0]);
-  }
-
-  function copyAddress() {
-    setMenuOpen(false);
-    navigator.clipboard?.writeText(account).catch(() => {});
-  }
-
-  function switchWallet() {
-    setMenuOpen(false);
-    forgetWallet();
-    connect();
-  }
-
-  async function disconnect() {
-    setMenuOpen(false);
-    try {
-      // EIP-2255. Not every wallet implements it; the fallback below still
-      // clears the app's side of the connection.
-      await provider?.request({
-        method: "wallet_revokePermissions",
-        params: [{ eth_accounts: {} }],
-      });
-    } catch {
-      /* wallet keeps its own permissions; we forget the account locally */
-    }
-    forgetWallet();
+    w.connect();
   }
 
   return (
@@ -143,24 +47,33 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-3">
-          {account && !chainOk && (
-            <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">
-              wrong network
-            </span>
+          {w.connected && !w.onArc && (
+            <button
+              onClick={() =>
+                w.provider?.request({
+                  method: "wallet_switchEthereumChain",
+                  params: [{ chainId: ARC_NETWORK_PARAMS.chainId }],
+                })
+              }
+              className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-medium hover:bg-amber-200 transition-colors"
+              title="Switch to Arc to sign transactions"
+            >
+              wrong network — switch
+            </button>
           )}
-          {account && chainOk && (
+          {w.connected && w.onArc && (
             <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">
-              {Number(balance).toFixed(2)} USDC
+              {Number(w.balance).toFixed(2)} USDC
             </span>
           )}
-          {account ? (
+          {w.connected ? (
             <div className="relative">
               <button
                 onClick={() => setMenuOpen((v) => !v)}
                 className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors flex items-center gap-1.5"
-                title={account}
+                title={w.account}
               >
-                {account.slice(0, 6)}…{account.slice(-4)}
+                {w.account.slice(0, 6)}…{w.account.slice(-4)}
                 <span className="text-slate-400 text-[10px]">▾</span>
               </button>
               {menuOpen && (
@@ -171,19 +84,19 @@ export default function Header() {
                   />
                   <div className="absolute right-0 mt-2 w-52 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden z-30">
                     <button
-                      onClick={copyAddress}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        navigator.clipboard?.writeText(w.account).catch(() => {});
+                      }}
                       className="w-full text-left px-3 py-2.5 text-sm text-slate-800 hover:bg-emerald-50 transition-colors"
                     >
                       Copy address
                     </button>
                     <button
-                      onClick={switchWallet}
-                      className="w-full text-left px-3 py-2.5 text-sm text-slate-800 hover:bg-emerald-50 transition-colors"
-                    >
-                      Switch wallet
-                    </button>
-                    <button
-                      onClick={disconnect}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        w.disconnect();
+                      }}
                       className="w-full text-left px-3 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition-colors"
                     >
                       Disconnect
@@ -213,7 +126,10 @@ export default function Header() {
                     {picker.map((p) => (
                       <button
                         key={p.rdns}
-                        onClick={() => connectWith(p)}
+                        onClick={() => {
+                          setPicker(null);
+                          w.connectWith(p);
+                        }}
                         className="w-full text-left px-3 py-2.5 text-sm text-slate-800 hover:bg-emerald-50 transition-colors"
                       >
                         {p.name}

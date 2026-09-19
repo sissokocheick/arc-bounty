@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { ethers } from "ethers";
 import Header from "@/components/Header";
+import { useWallet } from "@/components/wallet";
 import { Modal, Skeleton, useToast } from "@/components/ui";
 import {
   AGENTLY_ABI,
-  ARC_CHAIN_ID,
   explorerAddr,
   explorerTx,
   fmt,
@@ -16,7 +16,6 @@ import {
   readWithRetry,
   short,
 } from "@/utils/contract";
-import { getEip1193, getProviders } from "@/utils/providers";
 
 const BOARD = process.env.NEXT_PUBLIC_TASK_BOARD_ADDRESS || "";
 const VAULT = process.env.NEXT_PUBLIC_AGENT_VAULT_ADDRESS || "";
@@ -44,9 +43,8 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>("Tasks");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
-  const [account, setAccount] = useState("");
   const [lastTx, setLastTx] = useState<string>("");
-  const [hasWallet, setHasWallet] = useState(true);
+  const { account, provider: walletProvider, hasWallet, onArc } = useWallet();
   const [readError, setReadError] = useState<string>("");
   const [proofModal, setProofModal] = useState<bigint | null>(null);
   const [proofInput, setProofInput] = useState("");
@@ -82,19 +80,6 @@ export default function Home() {
 
   useEffect(() => {
     read();
-    // Wallet is only needed to sign transactions, never to read.
-    if (!getEip1193()) {
-      setHasWallet(false);
-      return;
-    }
-    setHasWallet(true);
-    (async () => {
-      const provider = new ethers.BrowserProvider(getEip1193()!);
-      const network = await provider.getNetwork();
-      if (Number(network.chainId) !== ARC_CHAIN_ID) return;
-      const accs = await provider.listAccounts();
-      if (accs.length) setAccount(accs[0].address);
-    })();
   }, [read]);
 
   // Keep the board feeling live while the page is open.
@@ -104,12 +89,17 @@ export default function Home() {
   }, [read]);
 
   async function getSigner() {
-    if (!getEip1193()) {
+    if (!walletProvider) {
       throw new Error(
-        "No wallet detected. Install MetaMask and connect to Arc (chain 5042) to sign transactions."
+        "No wallet detected. Install MetaMask or OKX Wallet and connect to sign transactions."
       );
     }
-    const provider = new ethers.BrowserProvider(getEip1193()!);
+    if (!onArc) {
+      throw new Error(
+        "Your wallet is on the wrong network. Switch to Arc (chain 5042) in your wallet, then try again."
+      );
+    }
+    const provider = new ethers.BrowserProvider(walletProvider);
     return await provider.getSigner();
   }
 
@@ -125,7 +115,7 @@ export default function Home() {
       try {
         receipt = await getReceiptAny(t.hash);
         if (!receipt) {
-          receipt = await new ethers.BrowserProvider(getEip1193()!).getTransactionReceipt(t.hash);
+          receipt = await new ethers.BrowserProvider(walletProvider).getTransactionReceipt(t.hash);
         }
       } catch {
         /* could not confirm — still not a failed transaction */
@@ -463,6 +453,14 @@ function TasksTab(props: {
             {fmt(totalEscrowed)} USDC escrowed
           </span>
         </h2>
+        {!account && (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600 flex items-center justify-between gap-3">
+            <span>
+              Browse freely — but posting a task, submitting work or approving a
+              payout needs a wallet on Arc (chain 5042).
+            </span>
+          </div>
+        )}
         {open.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-slate-500 text-sm">
             No open tasks right now. Post one and it appears here instantly,
@@ -696,6 +694,7 @@ function Field({
 
 function VaultTab({ account }: { account: string }) {
   const toast = useToast();
+  const { provider: walletProvider, onArc } = useWallet();
   const [state, setState] = useState<any>(null);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -749,9 +748,15 @@ function VaultTab({ account }: { account: string }) {
   async function run(fn: string, label: string, ...args: any[]) {
     try {
       setLoading(true);
-      if (!getEip1193())
-        throw new Error("No wallet detected. Install MetaMask to sign.");
-      const provider = new ethers.BrowserProvider(getEip1193()!);
+      if (!walletProvider)
+        throw new Error(
+          "No wallet detected. Install MetaMask or OKX Wallet and connect to sign."
+        );
+      if (!onArc)
+        throw new Error(
+          "Your wallet is on the wrong network. Switch to Arc (chain 5042) and try again."
+        );
+      const provider = new ethers.BrowserProvider(walletProvider);
       const s = await provider.getSigner();
       const c = new ethers.Contract(VAULT, AGENTLY_ABI, s);
       const t = await c[fn](...args);
@@ -1087,6 +1092,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function AgentsTab() {
   const toast = useToast();
+  const { provider: walletProvider, onArc } = useWallet();
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -1111,10 +1117,16 @@ function AgentsTab() {
     e.preventDefault();
     try {
       setLoading(true);
-      if (!getEip1193())
-        throw new Error("No wallet detected. Install MetaMask to sign.");
+      if (!walletProvider)
+        throw new Error(
+          "No wallet detected. Install MetaMask or OKX Wallet and connect to sign."
+        );
+      if (!onArc)
+        throw new Error(
+          "Your wallet is on the wrong network. Switch to Arc (chain 5042) and try again."
+        );
       const f = new FormData(e.currentTarget as HTMLFormElement);
-      const provider = new ethers.BrowserProvider(getEip1193()!);
+      const provider = new ethers.BrowserProvider(walletProvider!);
       const s = await provider.getSigner();
       const c = new ethers.Contract(REGISTRY, AGENTLY_ABI, s);
       const t = await c.register(
