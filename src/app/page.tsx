@@ -12,6 +12,7 @@ import {
   explorerTx,
   fmt,
   getReadContract,
+  getReadProvider,
   describeError,
   getReceiptAny,
   readWithRetry,
@@ -760,21 +761,27 @@ function VaultTab({ account }: { account: string }) {
           c.spendCount(),
           c.dailyRemaining(),
           p.getBalance(vault),
+        ] as const);
+      });
+      const [owner, agent, policy, totalSpent, spendCount, remaining, balance] = data;
+
+      // terminated()/terminatedAt() are newer than the first deployed vault.
+      // That one predates the close feature, so these selectors revert on it.
+      // One attempt, no retry: the revert is permanent, not a flaky node, and
+      // retrying it 16 times would drag the poll down. An unsupported read just
+      // means the vault can never have been closed.
+      let terminated = false;
+      let terminatedAt = 0n;
+      try {
+        const c = getReadContract(vault, getReadProvider());
+        [terminated, terminatedAt] = await Promise.all([
           c.terminated(),
           c.terminatedAt(),
         ] as const);
-      });
-      const [
-        owner,
-        agent,
-        policy,
-        totalSpent,
-        spendCount,
-        remaining,
-        balance,
-        terminated,
-        terminatedAt,
-      ] = data;
+      } catch {
+        /* legacy vault — termination did not exist when it was deployed */
+      }
+
       setState({
         owner,
         agent,
