@@ -330,6 +330,7 @@ export default function Home() {
               account={account}
               loading={loading}
               hasWallet={hasWallet}
+              onArc={onArc}
               onSubmit={submitWork}
               onApprove={approve}
               onReject={reject}
@@ -433,6 +434,7 @@ function TasksTab(props: {
   account: string;
   loading: boolean;
   hasWallet: boolean;
+  onArc: boolean;
   onSubmit: (id: bigint) => void;
   onApprove: (id: bigint) => void;
   onReject: (id: bigint) => void;
@@ -440,6 +442,13 @@ function TasksTab(props: {
   onCreate: (e: React.FormEvent) => void;
 }) {
   const { tasks, account } = props;
+  // A reader can look at everything, but signing needs a wallet on the right
+  // chain. Naming that gap here keeps the cards honest about why a button is
+  // off instead of leaving the user to guess.
+  const canSign = props.hasWallet && props.onArc;
+  const signReason = !props.hasWallet
+    ? "Connect a wallet on Arc (chain 5042) to approve this"
+    : "Wrong network — switch to Arc in your wallet to approve this";
   const open = tasks.filter((t) => !t.completed && !t.cancelled);
   const settled = tasks.filter((t) => t.completed || t.cancelled);
   const totalEscrowed = open.reduce((s, t) => s + t.reward, 0n);
@@ -527,19 +536,21 @@ function TasksTab(props: {
                   </a>
                 )}
 
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                   {mine && t.submitted && (
                     <>
                       <button
                         onClick={() => props.onApprove(t.id)}
-                        disabled={props.loading || !props.hasWallet}
+                        disabled={props.loading || !canSign}
+                        title={signReason}
                         className="text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
                       >
                         Approve &amp; pay
                       </button>
                       <button
                         onClick={() => props.onReject(t.id)}
-                        disabled={props.loading || !props.hasWallet}
+                        disabled={props.loading || !canSign}
+                        title={signReason}
                         className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
                       >
                         Reject &amp; reopen
@@ -549,7 +560,8 @@ function TasksTab(props: {
                   {mine && !t.submitted && (
                     <button
                       onClick={() => props.onCancel(t.id)}
-                      disabled={props.loading}
+                      disabled={props.loading || !canSign}
+                      title={signReason}
                       className="text-sm font-medium px-3 py-1.5 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                     >
                       Cancel &amp; refund
@@ -563,6 +575,21 @@ function TasksTab(props: {
                     >
                       Submit work
                     </button>
+                  )}
+                  {/* The task is under someone else's review. A stranger has no
+                      action to take, so show the review controls greyed out —
+                      this is what they would see on their own task, and it
+                      says why it is not theirs to decide. */}
+                  {!mine && t.submitted && (
+                    <button
+                      disabled
+                      className="text-sm font-medium px-3 py-1.5 rounded-lg bg-slate-100 text-slate-400 cursor-not-allowed"
+                    >
+                      Approve &amp; pay
+                    </button>
+                  )}
+                  {!canSign && mine && (
+                    <span className="text-xs text-amber-600">{signReason}</span>
                   )}
                   {!mine && t.submitted && (
                     <span className="text-xs text-slate-400">
