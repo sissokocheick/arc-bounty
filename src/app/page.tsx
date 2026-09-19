@@ -512,6 +512,23 @@ function TasksTab(props: {
                   )}
                 </div>
 
+                {t.submitted && t.proofUrl && (
+                  // The whole point of the review: the creator has to be able
+                  // to open the work before deciding to pay for it.
+                  <a
+                    href={t.proofUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 hover:bg-blue-100 transition-colors"
+                  >
+                    <span className="shrink-0">Review the submitted work</span>
+                    <span className="truncate font-mono text-xs opacity-80">
+                      {t.proofUrl}
+                    </span>
+                    <span className="ml-auto shrink-0 text-xs">↗</span>
+                  </a>
+                )}
+
                 <div className="mt-4 flex flex-wrap gap-2">
                   {mine && t.submitted && (
                     <>
