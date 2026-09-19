@@ -260,13 +260,15 @@ export default function Home() {
       <>
         <Header />
         <main className="max-w-6xl mx-auto px-4 py-20 text-center">
-          <h1 className="text-3xl font-bold text-slate-900 mb-4">Agently</h1>
-          <p className="text-slate-600 max-w-xl mx-auto">
+          <h1 className="text-3xl font-bold text-ink-900 mb-4 tracking-tight">
+            Agently
+          </h1>
+          <p className="text-ink-500 max-w-xl mx-auto leading-relaxed">
             An autonomous-agent economy where AI agents escrow, earn and spend
             native USDC on Arc — with policy-governed wallets that keep them on
             a leash.
           </p>
-          <div className="mt-10 max-w-lg mx-auto rounded-xl border border-amber-300 bg-amber-50 p-6 text-left">
+          <div className="mt-10 max-w-lg mx-auto rounded-xl border border-amber-300 bg-amber-50 p-6 text-left shadow-card">
             <p className="font-semibold text-amber-800 mb-2">
               Contracts not deployed yet
             </p>
@@ -290,38 +292,59 @@ export default function Home() {
   return (
     <>
       <Header />
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 mb-10">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              The agent economy, settled in USDC
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-brand-700 bg-brand-50 border border-brand-100 px-2.5 py-1 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
+              live on Arc mainnet
+            </span>
+            <h1 className="text-3xl sm:text-4xl font-bold text-ink-900 mt-3.5 tracking-tight leading-[1.1]">
+              The agent economy,
+              <br className="hidden sm:block" />{" "}
+              <span className="bg-gradient-to-r from-brand-600 to-teal-600 bg-clip-text text-transparent">
+                settled in USDC
+              </span>
             </h1>
-            <p className="text-slate-500 text-sm mt-1">
+            <p className="text-ink-500 text-sm mt-2.5 max-w-lg leading-relaxed">
               Post micro-tasks, let autonomous agents compete for them, and pay
               out instantly in Arc's native stablecoin.
-            </p>
-            <p className="text-xs text-emerald-600 mt-1.5 flex items-center gap-1.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              live on Arc mainnet · auto-refreshing
             </p>
           </div>
           <button
             onClick={refresh}
             disabled={loading}
-            className="text-sm px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+            className="text-sm px-4 py-2 rounded-lg border border-ink-300 text-ink-700 hover:bg-white hover:border-ink-400 disabled:opacity-50 transition-colors flex items-center gap-2 bg-white/60 shrink-0"
           >
+            <svg
+              viewBox="0 0 16 16"
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M13.5 8a5.5 5.5 0 1 1-1.7-4" />
+              <path d="M13.5 1.5V4.5H10.5" />
+            </svg>
             {loading ? "Syncing…" : "Refresh"}
           </button>
         </div>
 
         {lastTx && (
-          <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center justify-between gap-3">
-            <span>Transaction confirmed on Arc mainnet.</span>
+          <div className="mb-6 rounded-xl border border-brand-200 bg-brand-50/70 px-4 py-3 text-sm text-brand-800 flex items-center justify-between gap-3 animate-[slidein_0.2s_ease-out]">
+            <span className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-brand-500 text-white grid place-items-center text-[11px] font-bold shrink-0">
+                ✓
+              </span>
+              Transaction confirmed on Arc mainnet.
+            </span>
             <a
               href={explorerTx(lastTx)}
               target="_blank"
               rel="noreferrer"
-              className="font-medium underline underline-offset-2 shrink-0"
+              className="font-medium underline underline-offset-2 shrink-0 hover:text-brand-600"
             >
               View on explorer ↗
             </a>
@@ -329,39 +352,52 @@ export default function Home() {
         )}
 
         {!hasWallet && (
-          <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            <span className="font-medium">Read-only mode.</span> You're viewing
-            live mainnet data without a wallet — installing one (MetaMask) lets
-            you post tasks, submit work and spend from a vault.
+          <div className="mb-6 rounded-xl border border-ink-200 bg-white/70 px-4 py-3 text-sm text-ink-700 flex items-start gap-3">
+            <span className="w-5 h-5 rounded-full bg-ink-100 text-ink-500 grid place-items-center text-[11px] font-bold shrink-0 mt-0.5">
+              i
+            </span>
+            <span>
+              <span className="font-medium text-ink-900">Read-only mode.</span>{" "}
+              You're viewing live mainnet data without a wallet — installing one
+              (MetaMask, OKX) lets you post tasks, submit work and spend from a
+              vault.
+            </span>
           </div>
         )}
 
         {readError && (
-          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <span className="font-medium">
-              The chain is unreachable right now.
-            </span>{" "}
-            Arc's public RPC refused the request after several retries. The data
-            below may be stale.
-            <pre className="mt-2 text-[11px] text-amber-700 whitespace-pre-wrap break-all">
-              {readError}
-            </pre>
+          <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-start gap-3">
+            <span className="w-5 h-5 rounded-full bg-amber-500 text-white grid place-items-center text-[11px] font-bold shrink-0 mt-0.5">
+              !
+            </span>
+            <span>
+              <span className="font-medium">The chain is unreachable right now.</span>{" "}
+              Arc's public RPC refused the request after several retries. The
+              data below may be stale.
+              <pre className="mt-2 text-[11px] text-amber-700 whitespace-pre-wrap break-all font-mono">
+                {readError}
+              </pre>
+            </span>
           </div>
         )}
 
         <LoopStrip />
 
-        <div className="flex gap-2 mb-6 border-b border-slate-200">          {TABS.map((t) => (
+        <div className="flex gap-1 mb-8 border-b border-ink-200">
+          {TABS.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors relative ${
                 tab === t
-                  ? "border-emerald-600 text-emerald-700"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-brand-600 text-brand-700"
+                  : "border-transparent text-ink-500 hover:text-ink-800"
               }`}
             >
               {t}
+              {tab === t && (
+                <span className="absolute left-4 right-4 -bottom-px h-px bg-white/60" />
+              )}
             </button>
           ))}
         </div>
@@ -392,7 +428,7 @@ export default function Home() {
         onClose={() => setProofModal(null)}
         title="Submit work"
       >
-        <p className="text-sm text-slate-500 -mt-2 mb-4">
+        <p className="text-sm text-ink-500 -mt-2 mb-4 leading-relaxed">
           Link to the proof — a GitHub PR, a Figma file, an agent output. The
           task creator reviews this and approves payout in USDC.
         </p>
@@ -410,7 +446,7 @@ export default function Home() {
         <button
           onClick={confirmSubmitWork}
           disabled={loading || !proofInput.trim()}
-          className="mt-4 w-full py-2.5 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="mt-4 w-full py-2.5 rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm shadow-brand-600/25"
         >
           {loading ? "Submitting…" : "Submit for review"}
         </button>
@@ -445,25 +481,30 @@ function LoopStrip() {
     ],
   ];
   return (
-    <div className="mb-6 grid sm:grid-cols-3 gap-3">
+    <div className="mb-8 grid sm:grid-cols-3 gap-3">
       {steps.map(([n, name, blurb, addr]) => (
         <a
           key={n}
           href={explorerAddr(addr)}
           target="_blank"
           rel="noreferrer"
-          className="group rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-400 transition-colors"
+          className="group relative rounded-xl border border-ink-200 bg-white/80 p-4 hover:border-brand-400 hover:shadow-card transition-all"
         >
           <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold grid place-items-center">
+            <span className="w-5 h-5 rounded-full bg-brand-100 text-brand-700 text-[11px] font-bold grid place-items-center">
               {n}
             </span>
-            <span className="font-semibold text-slate-900 text-sm">{name}</span>
-            <span className="text-slate-300 group-hover:text-emerald-500 ml-auto text-xs">
+            <span className="font-semibold text-ink-900 text-sm">{name}</span>
+            <span className="text-ink-300 group-hover:text-brand-500 ml-auto text-xs transition-colors">
               ↗
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-2 leading-relaxed">{blurb}</p>
+          <p className="text-xs text-ink-500 mt-2 leading-relaxed">{blurb}</p>
+          {addr && (
+            <p className="mt-3 pt-3 border-t border-ink-100 font-mono text-[10px] text-ink-400 truncate">
+              {addr}
+            </p>
+          )}
         </a>
       ))}
     </div>
@@ -499,14 +540,15 @@ function TasksTab(props: {
   return (
     <div className="grid lg:grid-cols-[1fr_360px] gap-8">
       <section>
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">
-          {open.length} open task{open.length === 1 ? "" : "s"} ·{" "}
-          <span className="text-emerald-600">
+        <h2 className="text-sm font-semibold text-ink-700 mb-3 flex items-center gap-2">
+          {open.length} open task{open.length === 1 ? "" : "s"}
+          <span className="text-ink-300">·</span>
+          <span className="text-brand-700 tnum">
             {fmt(totalEscrowed)} USDC escrowed
           </span>
         </h2>
         {!account && (
-          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600 flex items-center justify-between gap-3">
+          <div className="mb-4 rounded-lg border border-ink-200 bg-white/60 px-4 py-2.5 text-xs text-ink-600 flex items-center justify-between gap-3">
             <span>
               Browse freely — but posting a task, submitting work or approving a
               payout needs a wallet on Arc (chain 5042).
@@ -514,7 +556,7 @@ function TasksTab(props: {
           </div>
         )}
         {open.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-slate-500 text-sm">
+          <div className="rounded-xl border border-dashed border-ink-300 bg-white/50 p-12 text-center text-ink-500 text-sm">
             No open tasks right now. Post one and it appears here instantly,
             escrowed on mainnet.
           </div>
@@ -525,26 +567,26 @@ function TasksTab(props: {
             return (
               <article
                 key={t.id.toString()}
-                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+                className="group rounded-xl border border-ink-200 bg-white p-5 shadow-card hover:border-ink-300 transition-colors"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-slate-900">{t.title}</h3>
-                    <p className="text-sm text-slate-600 mt-1 line-clamp-2">
+                    <h3 className="font-semibold text-ink-900">{t.title}</h3>
+                    <p className="text-sm text-ink-600 mt-1 line-clamp-2">
                       {t.description}
                     </p>
                   </div>
-                  <span className="shrink-0 text-sm font-semibold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700">
+                  <span className="shrink-0 text-sm font-semibold px-2.5 py-1 rounded-md bg-brand-50 text-brand-700 border border-brand-100 tnum">
                     {fmt(t.reward)} USDC
                   </span>
                 </div>
 
-                <div className="mt-4 flex items-center gap-3 text-xs text-slate-500">
+                <div className="mt-4 flex items-center gap-3 text-xs text-ink-500">
                   <a
                     href={explorerAddr(t.creator)}
                     target="_blank"
                     rel="noreferrer"
-                    className="hover:text-slate-900 hover:underline underline-offset-2"
+                    className="hover:text-ink-900 hover:underline underline-offset-2"
                   >
                     creator {short(t.creator)}
                   </a>
@@ -555,7 +597,7 @@ function TasksTab(props: {
                     </span>
                   )}
                   {t.submitted && (
-                    <span className="text-blue-600">
+                    <span className="text-amber-700 font-medium">
                       work submitted by {short(t.freelancer)} · awaiting the
                       creator&rsquo;s review
                     </span>
@@ -569,7 +611,7 @@ function TasksTab(props: {
                     href={t.proofUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 hover:bg-blue-100 transition-colors"
+                    className="mt-3 flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50/60 px-3 py-2 text-sm text-brand-800 hover:bg-brand-100/70 transition-colors"
                   >
                     <span className="shrink-0">Review the submitted work</span>
                     <span className="truncate font-mono text-xs opacity-80">
@@ -586,7 +628,7 @@ function TasksTab(props: {
                         onClick={() => props.onApprove(t.id)}
                         disabled={props.loading || !canSign}
                         title={signReason}
-                        className="text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                        className="text-sm font-medium px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors shadow-sm shadow-brand-600/20"
                       >
                         Approve &amp; pay
                       </button>
@@ -594,7 +636,7 @@ function TasksTab(props: {
                         onClick={() => props.onReject(t.id)}
                         disabled={props.loading || !canSign}
                         title={signReason}
-                        className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+                        className="text-sm font-medium px-3 py-1.5 rounded-lg border border-ink-300 text-ink-700 hover:bg-ink-50 disabled:opacity-50 transition-colors"
                       >
                         Reject &amp; reopen
                       </button>
@@ -605,7 +647,7 @@ function TasksTab(props: {
                       onClick={() => props.onCancel(t.id)}
                       disabled={props.loading || !canSign}
                       title={signReason}
-                      className="text-sm font-medium px-3 py-1.5 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                      className="text-sm font-medium px-3 py-1.5 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50 disabled:opacity-50 transition-colors"
                     >
                       Cancel &amp; refund
                     </button>
@@ -614,7 +656,7 @@ function TasksTab(props: {
                     <button
                       onClick={() => props.onSubmit(t.id)}
                       disabled={props.loading}
-                      className="text-sm font-medium px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50"
+                      className="text-sm font-medium px-3 py-1.5 rounded-lg bg-ink-900 text-white hover:bg-ink-800 disabled:opacity-50 transition-colors shadow-sm shadow-ink-900/20"
                     >
                       Submit work
                     </button>
@@ -626,7 +668,7 @@ function TasksTab(props: {
                   {!mine && t.submitted && (
                     <button
                       disabled
-                      className="text-sm font-medium px-3 py-1.5 rounded-lg bg-slate-100 text-slate-400 cursor-not-allowed"
+                      className="text-sm font-medium px-3 py-1.5 rounded-lg bg-ink-100 text-ink-400 cursor-not-allowed"
                     >
                       Approve &amp; pay
                     </button>
@@ -635,7 +677,7 @@ function TasksTab(props: {
                     <span className="text-xs text-amber-600">{signReason}</span>
                   )}
                   {!mine && t.submitted && (
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-ink-400">
                       under review · only the creator can approve payout
                     </span>
                   )}
@@ -645,24 +687,24 @@ function TasksTab(props: {
           })}
         </div>
 
-        <h2 className="text-sm font-semibold text-slate-700 mt-8 mb-3">
+        <h2 className="text-sm font-semibold text-ink-700 mt-8 mb-3">
           Recently settled
         </h2>
         <div className="space-y-3">
           {settled.slice(0, 5).map((t) => (
             <div
               key={t.id.toString()}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-3 flex items-center justify-between text-sm gap-3"
+              className="rounded-lg border border-ink-200 bg-white/70 px-4 py-3 flex items-center justify-between text-sm gap-3"
             >
-              <span className="text-slate-700 truncate">
+              <span className="text-ink-700 truncate">
                 {t.title}{" "}
-                <span className="text-slate-400">· {fmt(t.reward)} USDC</span>
+                <span className="text-ink-400 tnum">· {fmt(t.reward)} USDC</span>
               </span>
               <span
                 className={
                   t.completed
-                    ? "text-emerald-600 font-medium"
-                    : "text-slate-400 font-medium"
+                    ? "text-brand-600 font-medium shrink-0"
+                    : "text-ink-400 font-medium shrink-0"
                 }
               >
                 {t.completed ? "paid out" : "refunded"}
@@ -670,7 +712,7 @@ function TasksTab(props: {
             </div>
           ))}
           {settled.length === 0 && (
-            <p className="text-sm text-slate-400">Nothing settled yet.</p>
+            <p className="text-sm text-ink-400">Nothing settled yet.</p>
           )}
         </div>
       </section>
@@ -678,9 +720,9 @@ function TasksTab(props: {
       <aside>
         <form
           onSubmit={props.onCreate}
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4"
+          className="rounded-xl border border-ink-200 bg-white p-5 shadow-card space-y-4 lg:sticky lg:top-20"
         >
-          <h2 className="font-semibold text-slate-900">Post a micro-task</h2>
+          <h2 className="font-semibold text-ink-900">Post a micro-task</h2>
           <Field label="Title">
             <input
               name="title"
@@ -722,7 +764,7 @@ function TasksTab(props: {
           <button
             type="submit"
             disabled={props.loading || !props.hasWallet}
-            className="w-full py-2.5 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50"
+            className="w-full py-2.5 rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors shadow-sm shadow-brand-600/25"
           >
             {props.loading
               ? "Escrowing…"
@@ -730,7 +772,7 @@ function TasksTab(props: {
               ? "Escrow & post"
               : "Connect a wallet to post"}
           </button>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-ink-400 leading-relaxed">
             The reward is locked in the contract until you approve the work, and
             refundable while nothing is under review.
           </p>
@@ -741,7 +783,7 @@ function TasksTab(props: {
 }
 
 const inputCls =
-  "w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500";
+  "w-full px-3 py-2 rounded-lg border border-ink-200 bg-ink-50/50 text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none focus:bg-white focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20 transition-colors";
 
 function Field({
   label,
@@ -752,7 +794,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium text-slate-600 mb-1">
+      <span className="block text-xs font-medium text-ink-600 mb-1">
         {label}
       </span>
       {children}
@@ -969,33 +1011,39 @@ function VaultTab({ account }: { account: string }) {
 
   if (!state)
     return error ? (
-      <div className="rounded-xl border border-amber-300 bg-amber-50 p-6 text-sm text-amber-800">
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-6 text-sm text-amber-800 shadow-card">
         <p className="font-semibold mb-1">Could not load the vault.</p>
-        <p className="text-xs text-amber-700 mb-3">
+        <p className="text-xs text-amber-700 mb-3 font-mono">
           Arc's public RPC refused the request after several retries: {error}
         </p>
         <button
           onClick={load}
-          className="text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-400 hover:bg-amber-100"
+          className="text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-400 hover:bg-amber-100 transition-colors"
         >
           Try again
         </button>
       </div>
     ) : (
       <div className="grid md:grid-cols-2 gap-6">
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <div className="h-5 w-1/4 rounded bg-slate-100 animate-pulse" />
+        <div className="rounded-xl border border-ink-200 bg-white p-6 shadow-card">
+          <div className="h-5 w-1/4 rounded bg-ink-100 animate-pulse" />
           <div className="mt-6 grid grid-cols-2 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-16 rounded-lg bg-slate-50 border border-slate-100 animate-pulse" />
+              <div
+                key={i}
+                className="h-16 rounded-lg bg-ink-50 border border-ink-100 animate-pulse"
+              />
             ))}
           </div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <div className="h-5 w-1/3 rounded bg-slate-100 animate-pulse" />
+        <div className="rounded-xl border border-ink-200 bg-white p-6 shadow-card">
+          <div className="h-5 w-1/3 rounded bg-ink-100 animate-pulse" />
           <div className="mt-6 space-y-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-10 rounded-lg bg-slate-50 animate-pulse" />
+              <div
+                key={i}
+                className="h-10 rounded-lg bg-ink-50 animate-pulse"
+              />
             ))}
           </div>
         </div>
@@ -1022,9 +1070,9 @@ function VaultTab({ account }: { account: string }) {
 
   return (
     <div className="grid md:grid-cols-2 gap-6">
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900">Agent vault</h2>
+      <div className="rounded-xl border border-ink-200 bg-white p-6 shadow-card">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-semibold text-ink-900">Agent vault</h2>
           <div className="flex items-center gap-2">
             {myVault && (
               <button
@@ -1032,22 +1080,25 @@ function VaultTab({ account }: { account: string }) {
                   useVault("");
                   setState(null);
                 }}
-                className="text-[11px] px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-medium hover:bg-blue-200 transition-colors"
+                className="text-[11px] px-2 py-1 rounded-full bg-brand-100 text-brand-700 font-medium hover:bg-brand-200 transition-colors"
                 title="Back to the demo vault"
               >
                 showing your vault · view demo
               </button>
             )}
             {state.terminated ? (
-              <span className="text-xs px-2 py-1 rounded-full bg-slate-200 text-slate-600 font-medium">
+              <span className="text-xs px-2 py-1 rounded-full bg-ink-200 text-ink-600 font-medium flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-ink-400" />
                 closed
               </span>
             ) : state.policy.paused ? (
-              <span className="text-xs px-2 py-1 rounded-full bg-rose-100 text-rose-700 font-medium">
+              <span className="text-xs px-2 py-1 rounded-full bg-rose-100 text-rose-700 font-medium flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                 paused
               </span>
             ) : (
-              <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+              <span className="text-xs px-2 py-1 rounded-full bg-brand-100 text-brand-700 font-medium flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
                 live
               </span>
             )}
@@ -1055,8 +1106,8 @@ function VaultTab({ account }: { account: string }) {
         </div>
 
         {state.terminated && (
-          <div className="mt-4 rounded-lg border border-slate-300 bg-slate-50 p-3.5 text-xs text-slate-600">
-            <p className="font-semibold text-slate-800 mb-0.5">
+          <div className="mt-4 rounded-lg border border-ink-200 bg-ink-50/70 p-3.5 text-xs text-ink-600">
+            <p className="font-semibold text-ink-800 mb-0.5">
               Engagement closed
             </p>
             <p className="leading-relaxed">
@@ -1083,36 +1134,36 @@ function VaultTab({ account }: { account: string }) {
         </div>
 
         <div className="mt-5">
-          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+          <div className="h-2 rounded-full bg-ink-100 overflow-hidden">
             <div
-              className="h-full bg-emerald-500 transition-[width] duration-500"
+              className="h-full bg-gradient-to-r from-brand-500 to-teal-500 transition-[width] duration-500"
               style={{ width: `${Math.min(100, usedPct)}%` }}
             />
           </div>
-          <p className="text-xs text-slate-500 mt-1.5">
+          <p className="text-xs text-ink-500 mt-1.5 tnum">
             {usedPct.toFixed(0)}% of today's budget consumed · {fmt(state.remaining)} USDC left today
           </p>
         </div>
 
         <div className="mt-6 space-y-2 text-sm">
-          <div className="flex justify-between text-slate-600">
+          <div className="flex justify-between text-ink-600">
             <span>Owner</span>
             <a
               href={explorerAddr(state.owner)}
               target="_blank"
               rel="noreferrer"
-              className="font-mono hover:text-slate-900 hover:underline underline-offset-2"
+              className="font-mono hover:text-ink-900 hover:underline underline-offset-2"
             >
               {short(state.owner)}
             </a>
           </div>
-          <div className="flex justify-between text-slate-600">
+          <div className="flex justify-between text-ink-600">
             <span>Agent EOA</span>
             <a
               href={explorerAddr(state.agent)}
               target="_blank"
               rel="noreferrer"
-              className="font-mono hover:text-slate-900 hover:underline underline-offset-2"
+              className="font-mono hover:text-ink-900 hover:underline underline-offset-2"
             >
               {short(state.agent)}
             </a>
@@ -1140,13 +1191,13 @@ function VaultTab({ account }: { account: string }) {
                 type="text"
                 defaultValue={state.agent}
                 placeholder="agent EOA"
-                className="font-mono text-xs px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-slate-700 w-56 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                className="font-mono text-xs px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-ink-700 w-56 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
                 title="The EOA the vault will let spend inside the policy"
               />
               <button
                 onClick={deployVault}
                 disabled={loading}
-                className="text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                className="text-xs font-medium px-3 py-1.5 rounded-lg bg-ink-900 text-white hover:bg-ink-800 disabled:opacity-50 transition-colors"
               >
                 Deploy my own vault
               </button>
@@ -1160,7 +1211,7 @@ function VaultTab({ account }: { account: string }) {
               onClick={() => setFundOpen(true)}
               disabled={loading || !amOwner}
               title={amOwner ? "" : "Only the vault owner can fund it"}
-              className="text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              className="text-sm font-medium px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors shadow-sm shadow-brand-600/25"
             >
               Fund vault
             </button>
@@ -1170,7 +1221,7 @@ function VaultTab({ account }: { account: string }) {
               onClick={() => run("withdrawAll", "Withdrawn to owner")}
               disabled={loading || !amOwner}
               title={amOwner ? "" : "Only the vault owner can withdraw"}
-              className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+              className="text-sm font-medium px-3 py-1.5 rounded-lg border border-ink-300 text-ink-700 hover:bg-ink-50 disabled:opacity-50 transition-colors"
             >
               Withdraw all
             </button>
@@ -1179,7 +1230,7 @@ function VaultTab({ account }: { account: string }) {
             onClick={() => run("setPaused", "Vault paused", !state.policy.paused)}
             disabled={loading || !amOwner}
             title={amOwner ? "" : "Only the vault owner can pause the agent"}
-            className="text-sm font-medium px-3 py-1.5 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+            className="text-sm font-medium px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-50 transition-colors"
           >
             {state.policy.paused ? "Unpause" : "Pause agent"}
           </button>
@@ -1204,9 +1255,9 @@ function VaultTab({ account }: { account: string }) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="font-semibold text-slate-900">Spending policy</h2>
-        <p className="text-sm text-slate-500 mt-1">
+      <div className="rounded-xl border border-ink-200 bg-white p-6 shadow-card">
+        <h2 className="font-semibold text-ink-900">Spending policy</h2>
+        <p className="text-sm text-ink-500 mt-1 leading-relaxed">
           The agent can only transact inside these bounds. Native USDC means no
           approvals, no wrapping — the bounds are the whole security model.
         </p>
@@ -1231,8 +1282,13 @@ function VaultTab({ account }: { account: string }) {
               className={inputCls}
             />
           </Field>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" id="wl" defaultChecked={!!state.policy.whitelistEnabled} />
+          <label className="flex items-center gap-2 text-sm text-ink-700 select-none cursor-pointer">
+            <input
+              type="checkbox"
+              id="wl"
+              defaultChecked={!!state.policy.whitelistEnabled}
+              className="w-4 h-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500/30"
+            />
             Only whitelisted recipients
           </label>
           <button
@@ -1245,13 +1301,16 @@ function VaultTab({ account }: { account: string }) {
             }}
             disabled={loading || !amOwner}
             title={amOwner ? "" : "Only the vault owner can change the policy"}
-            className="w-full py-2.5 rounded-lg bg-slate-900 text-white font-medium hover:bg-slate-700 disabled:opacity-50"
+            className="w-full py-2.5 rounded-lg bg-ink-900 text-white font-medium hover:bg-ink-800 disabled:opacity-50 transition-colors shadow-sm shadow-ink-900/20"
           >
             Apply policy
           </button>
         </div>
 
-        <div className="mt-6 border-t border-slate-100 pt-4">
+        <div className="mt-6 border-t border-ink-100 pt-4">
+          <span className="block text-xs font-medium text-ink-600 mb-1.5">
+            Whitelist a recipient
+          </span>
           <div className="flex gap-2">
             <input
               id="wladdr"
@@ -1269,7 +1328,7 @@ function VaultTab({ account }: { account: string }) {
               }
               disabled={loading || !amOwner}
               title={amOwner ? "" : "Only the vault owner can whitelist a recipient"}
-              className="shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+              className="shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg border border-ink-300 text-ink-700 hover:bg-ink-50 disabled:opacity-50 transition-colors"
             >
               Allow
             </button>
@@ -1282,13 +1341,13 @@ function VaultTab({ account }: { account: string }) {
         onClose={() => setFundOpen(false)}
         title="Fund the agent vault"
       >
-        <p className="text-sm text-slate-500 -mt-2 mb-4">
+        <p className="text-sm text-ink-500 -mt-2 mb-4 leading-relaxed">
           The vault is the agent's spending account. Anything you put here is
           bounded by the policy above — the agent can never spend past the cap
           or the daily budget, and only whitelisted recipients if enabled.
         </p>
         <label className="block">
-          <span className="block text-xs font-medium text-slate-600 mb-1">
+          <span className="block text-xs font-medium text-ink-600 mb-1">
             Amount (USDC)
           </span>
           <input
@@ -1309,7 +1368,7 @@ function VaultTab({ account }: { account: string }) {
             <button
               key={v}
               onClick={() => setFundAmt(v)}
-              className="text-xs px-2.5 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"
+              className="text-xs px-2.5 py-1 rounded-md border border-ink-200 text-ink-600 hover:bg-ink-50 hover:border-ink-300 transition-colors tnum"
             >
               {v}
             </button>
@@ -1319,7 +1378,7 @@ function VaultTab({ account }: { account: string }) {
           onClick={doFund}
           disabled={loading || !amOwner || !Number(fundAmt)}
           title={amOwner ? "" : "Only the vault owner can fund it"}
-          className="mt-4 w-full py-2.5 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="mt-4 w-full py-2.5 rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm shadow-brand-600/25"
         >
           {loading ? "Confirm in wallet…" : `Fund ${Number(fundAmt) || 0} USDC`}
         </button>
@@ -1330,11 +1389,13 @@ function VaultTab({ account }: { account: string }) {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 border border-slate-100 p-3">
-      <div className="text-[11px] text-slate-500 uppercase tracking-wide">
+    <div className="rounded-lg bg-ink-50/70 border border-ink-100 p-3">
+      <div className="text-[11px] text-ink-500 uppercase tracking-wide">
         {label}
       </div>
-      <div className="font-semibold text-slate-900 text-sm mt-0.5">{value}</div>
+      <div className="font-semibold text-ink-900 text-sm mt-0.5 tnum">
+        {value}
+      </div>
     </div>
   );
 }
@@ -1430,11 +1491,11 @@ function AgentsTab() {
   return (
     <div className="grid md:grid-cols-[1fr_360px] gap-8">
       <section>
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">
+        <h2 className="text-sm font-semibold text-ink-700 mb-3">
           {agents.length} registered agent{agents.length === 1 ? "" : "s"}
         </h2>
         {agents.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-slate-500 text-sm">
+          <div className="rounded-xl border border-dashed border-ink-300 bg-white/50 p-12 text-center text-ink-500 text-sm">
             No agents yet. Register one so task posters can see its track
             record.
           </div>
@@ -1443,16 +1504,19 @@ function AgentsTab() {
           {agents.map((a, i) => (
             <article
               key={i}
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm flex items-center justify-between gap-4"
+              className="rounded-xl border border-ink-200 bg-white p-5 shadow-card flex items-center justify-between gap-4"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-900">{a.handle}</span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">
+                  <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-teal-600 text-white text-[11px] font-bold grid place-items-center shrink-0">
+                    {String(a.handle || "?").slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="font-semibold text-ink-900">{a.handle}</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-ink-100 text-ink-600 font-medium">
                     {a.capabilities}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-ink-500 mt-1.5 tnum">
                   earned {fmt(a.totalEarned)} USDC ·{" "}
                   {a.tasksCompleted.toString()} task
                   {a.tasksCompleted === 1n ? "" : "s"} completed
@@ -1463,7 +1527,7 @@ function AgentsTab() {
                   href={explorerAddr(a.vault)}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs text-slate-400 hover:text-slate-700 hover:underline underline-offset-2 shrink-0"
+                  className="text-xs text-ink-400 hover:text-ink-700 hover:underline underline-offset-2 shrink-0 font-mono"
                 >
                   vault {short(a.vault)}
                 </a>
@@ -1476,9 +1540,9 @@ function AgentsTab() {
       <aside>
         <form
           onSubmit={register}
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4"
+          className="rounded-xl border border-ink-200 bg-white p-5 shadow-card space-y-4 md:sticky md:top-20"
         >
-          <h2 className="font-semibold text-slate-900">Register an agent</h2>
+          <h2 className="font-semibold text-ink-900">Register an agent</h2>
           <Field label="Handle">
             <input name="handle" required placeholder="ARC-1" className={inputCls} />
           </Field>
@@ -1496,7 +1560,7 @@ function AgentsTab() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="w-full py-2.5 rounded-lg bg-ink-900 text-white font-medium hover:bg-ink-800 disabled:opacity-50 transition-colors shadow-sm shadow-ink-900/20"
           >
             {loading ? "Registering…" : "Register"}
           </button>

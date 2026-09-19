@@ -95,16 +95,16 @@ export default function Diag() {
     <>
       <Header />
       <main className="max-w-3xl mx-auto px-4 py-8">
-        <h1 className="text-xl font-bold text-slate-900">
+        <h1 className="text-xl font-bold text-ink-900">
           RPC reachability check
         </h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <p className="text-sm text-ink-500 mt-1">
           Each Arc endpoint is pinged directly from this browser. This isolates
           whether the dashboard's "unreachable" error is the RPC node, the
           network, or CORS.
         </p>
 
-        <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600 font-mono">
+        <div className="mt-4 rounded-lg border border-ink-200 bg-white p-3 text-xs text-ink-600 font-mono">
           this page's origin: {origin || "…"}
         </div>
 
@@ -112,19 +112,19 @@ export default function Diag() {
           {results.map((r) => (
             <div
               key={r.url}
-              className="rounded-xl border border-slate-200 bg-white p-4"
+              className="rounded-xl border border-ink-200 bg-white p-4 shadow-card"
             >
               <div className="flex items-center gap-3">
                 <span
                   className={`w-2.5 h-2.5 rounded-full shrink-0 ${
                     r.status === "ok"
-                      ? "bg-emerald-500"
+                      ? "bg-brand-500"
                       : r.status === "fail"
                       ? "bg-rose-500"
                       : "bg-amber-400 animate-pulse"
                   }`}
                 />
-                <span className="font-mono text-sm text-slate-900 break-all">
+                <span className="font-mono text-sm text-ink-900 break-all">
                   {r.url}
                 </span>
                 <span className="ml-auto text-xs font-medium shrink-0">
@@ -135,7 +135,7 @@ export default function Diag() {
                     : "testing…"}
                 </span>
               </div>
-              <div className="mt-2 text-xs text-slate-500 grid gap-1">
+              <div className="mt-2 text-xs text-ink-500 grid gap-1">
                 {r.http !== undefined && (
                   <div>
                     HTTP {r.http} · {r.latency}ms · CORS header present:{" "}
@@ -155,7 +155,7 @@ export default function Diag() {
         <div
           className={`mt-6 rounded-lg border p-4 text-sm ${
             anyOk
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              ? "border-brand-200 bg-brand-50 text-brand-800"
               : "border-rose-200 bg-rose-50 text-rose-800"
           }`}
         >

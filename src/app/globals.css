@@ -1,11 +1,98 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------ tokens
+ * One place to change the look of everything. The palette is deliberately
+ * narrow: ink for text, emerald for money/positive, and one amber for "you
+ * need to do something". Anything else is a slip.
+ */
+@theme {
+  --color-ink-50: #f6f7f9;
+  --color-ink-100: #eceef2;
+  --color-ink-200: #dfe3ea;
+  --color-ink-300: #c6cdd8;
+  --color-ink-400: #9aa4b4;
+  --color-ink-500: #6b7688;
+  --color-ink-600: #4c5666;
+  --color-ink-700: #353d4a;
+  --color-ink-800: #222932;
+  --color-ink-900: #131820;
+  --color-ink-950: #0b0f14;
+
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  /* next/font injects --font-jetbrains; fall back through the stack if the
+   * variable has not loaded yet. */
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", "Cascadia Code",
+    "Roboto Mono", monospace;
+
+  --shadow-card: 0 1px 2px rgb(19 24 32 / 0.04),
+    0 4px 16px -6px rgb(19 24 32 / 0.08);
+  --shadow-pop: 0 12px 40px -12px rgb(19 24 32 / 0.22),
+    0 2px 8px rgb(19 24 32 / 0.06);
+}
+
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: #f8fafc;
+  /* The faint grid is the only decoration: it reads as "infrastructure"
+   * without competing with the data. Disabled where motion is reduced. */
+  background-color: var(--color-ink-50);
+  background-image:
+    radial-gradient(circle at 12% -8%, rgb(16 185 129 / 0.10), transparent 42%),
+    linear-gradient(rgb(19 24 32 / 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(19 24 32 / 0.022) 1px, transparent 1px);
+  background-size: 100% 100%, 44px 44px, 44px 44px;
+  background-attachment: fixed;
+}
+
+::selection {
+  background: var(--color-brand-100);
+  color: var(--color-brand-700);
+}
+
+/* Focus rings stay visible on keyboard, invisible on mouse. */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-brand-400);
+  border-radius: 0.5rem;
+}
+
+button,
+a,
+input,
+textarea {
+  font: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-ink-400);
+}
+
+/* Numbers that must not jitter as they update: tabular figures keep a balance
+ * from sliding sideways while the poll refreshes it. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    background-image: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 @keyframes slidein {
@@ -28,4 +115,20 @@ body {
     opacity: 1;
     transform: none;
   }
+}
+
+/* A card appearing for the first time, rather than popping in. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-rise {
+  animation: rise 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

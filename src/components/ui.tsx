@@ -67,9 +67,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
   const palette = {
-    success: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    error: "border-rose-200 bg-rose-50 text-rose-900",
-    info: "border-slate-200 bg-white text-slate-900",
+    success: "border-brand-200 bg-brand-50/95 text-brand-900",
+    error: "border-rose-200 bg-rose-50/95 text-rose-900",
+    info: "border-ink-200 bg-white/95 text-ink-900",
   }[toast.kind];
 
   const glyph = {
@@ -79,14 +79,14 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
   }[toast.kind];
 
   const glyphPalette = {
-    success: "bg-emerald-500 text-white",
+    success: "bg-brand-500 text-white",
     error: "bg-rose-500 text-white",
-    info: "bg-slate-400 text-white",
+    info: "bg-ink-400 text-white",
   }[toast.kind];
 
   return (
     <div
-      className={`pointer-events-auto rounded-xl border ${palette} shadow-lg shadow-slate-900/10 p-3.5 flex gap-3 animate-[slidein_0.18s_ease-out]`}
+      className={`pointer-events-auto rounded-xl border ${palette} shadow-pop p-3.5 flex gap-3 animate-[slidein_0.18s_ease-out]`}
     >
       <span
         className={`shrink-0 w-5 h-5 rounded-full ${glyphPalette} grid place-items-center text-[11px] font-bold mt-0.5`}
@@ -156,15 +156,15 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-ink-950/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/20 p-6 animate-[pop_0.15s_ease-out]">
+      <div className="relative w-full max-w-md rounded-2xl border border-ink-200 bg-white shadow-pop p-6 animate-[pop_0.15s_ease-out]">
         <div className="flex items-start justify-between gap-4 mb-4">
-          <h2 className="font-bold text-slate-900">{title}</h2>
+          <h2 className="font-bold text-ink-900">{title}</h2>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 -mt-1 -mr-1 px-1"
+            className="text-ink-300 hover:text-ink-700 -mt-1 -mr-1 px-1 transition-colors"
             aria-label="Close"
           >
             ✕
@@ -186,10 +186,10 @@ export function Skeleton({ lines = 3 }: { lines?: number }) {
       {Array.from({ length: lines }).map((_, i) => (
         <div
           key={i}
-          className="rounded-xl border border-slate-200 bg-white p-5"
+          className="rounded-xl border border-ink-200 bg-white p-5 shadow-card"
         >
-          <div className="h-3.5 w-1/3 rounded bg-slate-100 animate-pulse" />
-          <div className="mt-3 h-3 w-2/3 rounded bg-slate-100 animate-pulse" />
+          <div className="h-3.5 w-1/3 rounded bg-ink-100 animate-pulse" />
+          <div className="mt-3 h-3 w-2/3 rounded bg-ink-100 animate-pulse" />
         </div>
       ))}
     </div>
