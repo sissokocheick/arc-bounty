@@ -130,10 +130,17 @@ contract AgentVault {
     }
 
     /// @notice Remaining spendable amount in the current day.
+    /// @dev Reads the day fresh rather than trusting lastDay: nothing calls
+    ///      _rolloverDay until the agent spends, so a vault that sits idle
+    ///      across a UTC boundary would otherwise report yesterday's spend
+    ///      as if it were today's.
     function dailyRemaining() external view returns (uint256) {
-        uint256 today = block.timestamp / 1 days;
-        uint256 spent = (today == lastDay) ? spentToday : 0;
+        uint256 spent = _spentToday();
         return policy.dailyBudget > spent ? policy.dailyBudget - spent : 0;
+    }
+
+    function _spentToday() internal view returns (uint256) {
+        return (block.timestamp / 1 days == lastDay) ? spentToday : 0;
     }
 
     // ------------------------------------------------------------- owner ops

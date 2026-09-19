@@ -154,8 +154,12 @@ contract TaskBoard {
         if (msg.sender != t.creator) revert NotCreator();
         if (t.completed) revert AlreadyCompleted();
         if (t.cancelled) revert AlreadyCancelled();
-        // A task with work under review is no longer "open" — pay or reject it.
-        if (t.submitted) revert AlreadySubmitted();
+        // Work under review normally locks the escrow until the creator
+        // decides — that is what makes a submission binding. But once the
+        // deadline has passed the engagement is over, and the escrow must not
+        // sit in this contract forever just because nobody acted in time. The
+        // creator can then reclaim it; the worker's proof stays on-chain.
+        if (t.submitted && _live(t)) revert AlreadySubmitted();
 
         t.cancelled = true;
         uint256 refund = t.reward;
@@ -176,8 +180,10 @@ contract TaskBoard {
         return tasks[_id];
     }
 
-    /// @notice Every task, newest first. Cheap-ish for view calls; the UI
-    ///         paginates rather than rendering thousands of cards.
+    /// @notice Every task, newest first. This is fine while the board is small
+    ///         — it is a demo, not an indexer. If taskCount ever grows past a
+    ///         few thousand, add real pagination here before the view call
+    ///         becomes a gas trap for whoever hosts the RPC.
     function getAllTasks() external view returns (Task[] memory) {
         Task[] memory all = new Task[](taskCount);
         for (uint256 i = 0; i < taskCount; i++) {

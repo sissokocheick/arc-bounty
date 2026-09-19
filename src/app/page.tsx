@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ethers } from "ethers";
 import Header from "@/components/Header";
 import { useWallet } from "@/components/wallet";
@@ -53,6 +53,12 @@ export default function Home() {
   const [proofInput, setProofInput] = useState("");
   const [tasksLoaded, setTasksLoaded] = useState(false);
 
+  // A transaction in flight. setState is not synchronous, so the buttons'
+  // `disabled` attribute cannot protect the gap between the click and the next
+  // render — a fast double-click would fire a second transaction while the
+  // first is still being signed. This ref closes that gap.
+  const signing = useRef(false);
+
   const needConfig = !BOARD;
 
   // Reads go to the public RPC directly. This is deliberate: the dashboard must
@@ -85,9 +91,15 @@ export default function Home() {
     read();
   }, [read]);
 
-  // Keep the board feeling live while the page is open.
+  // Keep the board feeling live while the page is open. Skipped while a
+  // transaction is in flight: without this, a poll that started before the
+  // user acted can resolve after the action's own refresh and overwrite the
+  // fresh state with one that predates the click.
   useEffect(() => {
-    const id = setInterval(() => read(), 20_000);
+    const id = setInterval(() => {
+      if (signing.current) return;
+      read();
+    }, 20_000);
     return () => clearInterval(id);
   }, [read]);
 
@@ -107,6 +119,11 @@ export default function Home() {
   }
 
   async function tx(fn: () => Promise<ethers.TransactionResponse>, ok: string) {
+    // Lock before any await: the render that disables the buttons happens
+    // later than this line, and a double-click in that window starts a
+    // second, duplicate transaction.
+    if (signing.current) return;
+    signing.current = true;
     try {
       setLoading(true);
       const t = await fn();
@@ -147,16 +164,39 @@ export default function Home() {
       });
     } finally {
       setLoading(false);
+      signing.current = false;
     }
   }
 
   async function createTask(e: React.FormEvent) {
     e.preventDefault();
     const form = new FormData(e.currentTarget as HTMLFormElement);
+    const rewardRaw = String(form.get("reward") || "").trim().replace(",", ".");
+    // parseEther throws on anything it cannot read, and an uncaught throw in a
+    // form handler dies silently — the user clicks and nothing happens at all.
+    // Reject it here with a message instead.
+    let value: bigint;
+    try {
+      value = ethers.parseEther(rewardRaw || "0");
+    } catch {
+      toast.push({
+        kind: "error",
+        title: "Reward is not a number",
+        body: `“${rewardRaw}” is not a valid amount. Use a number of USDC, e.g. 0.005.`,
+      });
+      return;
+    }
+    if (value <= 0n) {
+      toast.push({
+        kind: "error",
+        title: "Reward must be greater than 0",
+        body: "A task with no reward escrows nothing, so the contract rejects it.",
+      });
+      return;
+    }
     const signer = await getSigner();
     const c = new ethers.Contract(BOARD, AGENTLY_ABI, signer);
-    const value = ethers.parseEther(String(form.get("reward")));
-    const days = Number(form.get("days") || 0);
+    const days = Math.min(90, Math.max(0, Number(form.get("days") || 0)));
     const deadline = days
       ? BigInt(Math.floor(Date.now() / 1000) + days * 86400)
       : 0n;
@@ -905,6 +945,9 @@ function VaultTab({ account }: { account: string }) {
         ethers.parseEther("0.05"),
         true,
       );
+      // With the whitelist on and empty, the very first spend would revert. Let
+      // the owner receive payments, which is also how an agent rebates change.
+      await typed.setWhitelist(await s.getAddress(), true);
       useVault(addr);
       toast.push({
         kind: "success",
@@ -1122,14 +1165,16 @@ function VaultTab({ account }: { account: string }) {
               Fund vault
             </button>
           )}
-          <button
-            onClick={() => run("withdrawAll", "Withdrawn to owner")}
-            disabled={loading || !amOwner}
-            title={amOwner ? "" : "Only the vault owner can withdraw"}
-            className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
-          >
-            Withdraw all
-          </button>
+          {!state.terminated && (
+            <button
+              onClick={() => run("withdrawAll", "Withdrawn to owner")}
+              disabled={loading || !amOwner}
+              title={amOwner ? "" : "Only the vault owner can withdraw"}
+              className="text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Withdraw all
+            </button>
+          )}
           <button
             onClick={() => run("setPaused", "Vault paused", !state.policy.paused)}
             disabled={loading || !amOwner}
@@ -1317,6 +1362,10 @@ function AgentsTab() {
 
   useEffect(() => {
     load();
+    // The other tabs keep themselves live; this one used to freeze on mount,
+    // so a registration never appeared until the page was reloaded.
+    const id = setInterval(() => load(), 20_000);
+    return () => clearInterval(id);
   }, []);
 
   async function register(e: React.FormEvent) {
@@ -1339,7 +1388,10 @@ function AgentsTab() {
         String(f.get("handle")),
         String(f.get("caps")),
         String(f.get("meta") || "ipfs://"),
-        VAULT || ethers.ZeroAddress
+        // Do not link this agent to the demo vault. That vault belongs to a
+        // leaked key, so a new agent would advertise a wallet it cannot spend
+        // from. No vault link until the registry can hold its own.
+        ethers.ZeroAddress
       );
       let receipt = null as ethers.TransactionReceipt | null;
       try {
