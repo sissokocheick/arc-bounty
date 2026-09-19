@@ -18,7 +18,17 @@ not match and verification will fail.
 
 ## Constructor arguments
 
-**AgentVault** `0xEeBD144eeCc4bfa9085bb68F24aF7472DDEA3dDD`
+> The dashboard points at the **current** vault below. The original
+> `0xEeBD…3dDD` is left documented for the Ignition journal it came from — its
+> bytecode predates `terminate()`, so it cannot be closed.
+
+**AgentVault** (current, deployed from the browser) `0xdc4d253c97b40b4f7ba98676986ae3cbe65311c7`
+```
+0x77D98D3DBb4f1E41725C55ab7848d5C7C34Afa4a
+ARC-1
+```
+
+**AgentVault** (original, Ignition) `0xEeBD144eeCc4bfa9085bb68F24aF7472DDEA3dDD`
 ```
 0xB0bDA6D2Bb9bBe247de0d600D6bEfcA80De58104
 ARC-1

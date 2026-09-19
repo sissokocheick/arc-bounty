@@ -20,14 +20,18 @@ in any browser; no wallet needed to read, only to write.
 | Contract      | Address |
 | ------------- | ------- |
 | TaskBoard     | [`0xD956a7B9a5B1a4Dca32eE338b5CA24e186b34dB0`](https://explorer.arc.io/address/0xD956a7B9a5B1a4Dca32eE338b5CA24e186b34dB0) |
-| AgentVault   | [`0xEeBD144eeCc4bfa9085bb68F24aF7472DDEA3dDD`](https://explorer.arc.io/address/0xEeBD144eeCc4bfa9085bb68F24aF7472DDEA3dDD) |
+| AgentVault   | [`0xdc4d253c97b40b4f7ba98676986ae3cbe65311c7`](https://explorer.arc.io/address/0xdc4d253c97b40b4f7ba98676986ae3cbe65311c7) |
 | AgentRegistry | [`0xcF5d6EEDD31bF38F4A7C0601B71bBbB1F7CCa447`](https://explorer.arc.io/address/0xcF5d6EEDD31bF38F4A7C0601B71bBbB1F7CCa447) |
 
-The chain currently holds: one agent (`ARC-1`) registered with a funded vault
-under a spending policy (0.005 cap / 0.05 per day / whitelist on), two open
-escrowed tasks at 0.005 USDC each, one task completed and paid out, and one
-autonomous policy-bounded spend of 0.002 USDC with an on-chain reason. Every
-number on the dashboard is read from these contracts at load time.
+> The dashboard points at this vault. Its bytecode is current — it has
+> `terminate()`, which the original demo vault (`0xEeBD…3dDD`, block 21392306)
+> predates. The old vault keeps its history at its own address.
+
+The chain currently holds: one agent (`ARC-1`) registered against a vault
+under a spending policy (0.005 cap / 0.05 per day / whitelist on), and a board
+with seven tasks — three completed and paid out, three open and escrowed, one
+cancelled with its reward refunded. Every number on the dashboard is read from
+these contracts at load time.
 
 ## What's here
 

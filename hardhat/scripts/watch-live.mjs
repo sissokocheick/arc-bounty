@@ -12,7 +12,10 @@ const RPC = "https://rpc.mainnet.arc.io";
 
 const CONTRACTS = {
   "0xD956a7B9a5B1a4Dca32eE338b5CA24e186b34dB0": "TaskBoard",
-  "0xEeBD144eeCc4bfa9085bb68F24aF7472DDEA3dDD": "AgentVault",
+  "0xdc4d253c97b40b4f7ba98676986ae3cbe65311c7": "AgentVault",
+  // The original demo vault — still watched, because its history is real and
+  // worth following even though the dashboard no longer points at it.
+  "0xEeBD144eeCc4bfa9085bb68F24aF7472DDEA3dDD": "AgentVault (legacy)",
   "0xcF5d6EEDD31bF38F4A7C0601B71bBbB1F7CCa447": "AgentRegistry",
 };
 const WALLET_TAGS = {

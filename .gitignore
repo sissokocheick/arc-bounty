@@ -48,3 +48,5 @@ hardhat/artifacts
 hardhat/cache
 hardhat/types
 node_modules
+
+.vercel
