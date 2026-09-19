@@ -850,10 +850,14 @@ function VaultTab({ account }: { account: string }) {
       // terminated()/terminatedAt() are newer than the first deployed vault.
       // That one predates the close feature, so these selectors revert on it.
       // One attempt, no retry: the revert is permanent, not a flaky node, and
-      // retrying it 16 times would drag the poll down. An unsupported read just
-      // means the vault can never have been closed.
+      // retrying it 16 times would drag the poll down.
       let terminated = false;
       let terminatedAt = 0n;
+      // "closable" is separate from "not terminated": a vault whose code has no
+      // terminate() will never read as closed AND can never be closed, so the
+      // button below has to know that rather than offer an action that always
+      // reverts with no data.
+      let closable = true;
       try {
         const c = getReadContract(vault, getReadProvider());
         [terminated, terminatedAt] = await Promise.all([
@@ -862,6 +866,7 @@ function VaultTab({ account }: { account: string }) {
         ] as const);
       } catch {
         /* legacy vault — termination did not exist when it was deployed */
+        closable = false;
       }
 
       setState({
@@ -874,6 +879,7 @@ function VaultTab({ account }: { account: string }) {
         balance,
         terminated,
         terminatedAt,
+        closable,
       });
       setError("");
     } catch (e: any) {
@@ -1234,7 +1240,7 @@ function VaultTab({ account }: { account: string }) {
           >
             {state.policy.paused ? "Unpause" : "Pause agent"}
           </button>
-          {!state.terminated && (
+          {!state.terminated && state.closable && (
             <button
               onClick={() => {
                 if (
@@ -1251,6 +1257,19 @@ function VaultTab({ account }: { account: string }) {
             >
               Close vault
             </button>
+          )}
+          {/* The deployed demo vault predates terminate(): calling it reverts
+              with empty data, which the wallet surfaces as a shapeless
+              "missing revert data". Nothing is broken and nothing can be
+              fixed in place — the code on chain is the code on chain. Say so,
+              instead of leaving a button that always fails. */}
+          {!state.terminated && !state.closable && (
+            <span
+              className="text-xs px-3 py-1.5 rounded-lg border border-ink-200 bg-ink-50/70 text-ink-500 italic"
+              title="This vault's deployed bytecode has no terminate() — it was created before the close feature existed"
+            >
+              Close vault · not supported by this vault
+            </span>
           )}
         </div>
       </div>

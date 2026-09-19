@@ -367,6 +367,15 @@ export function describeError(e: unknown): string {
     return "This wallet does not have enough USDC to cover the gas fee. Gas on Arc is paid in native USDC — top the wallet up and retry.";
   }
 
+  // A revert with no data at all reaches some wallets as the literal string
+  // "missing revert data" rather than a "0x" field. It means the call hit a
+  // selector the deployed contract does not implement — the contract cannot
+  // name its own complaint because the code path never existed.
+  const msg = (err?.shortMessage ?? err?.message ?? "") as string;
+  if (/missing revert data/i.test(msg)) {
+    return "This contract's deployed code does not implement that function, so the call reverted with no reason given. The action is not supported by this version of the contract.";
+  }
+
   // A real revert: find the first candidate that decodes to a known selector.
   for (const data of candidateRevertData(e)) {
     const sel = data.slice(0, 10);
