@@ -760,10 +760,32 @@ function VaultTab({ account }: { account: string }) {
           c.spendCount(),
           c.dailyRemaining(),
           p.getBalance(vault),
+          c.terminated(),
+          c.terminatedAt(),
         ] as const);
       });
-      const [owner, agent, policy, totalSpent, spendCount, remaining, balance] = data;
-      setState({ owner, agent, policy, totalSpent, spendCount, remaining, balance });
+      const [
+        owner,
+        agent,
+        policy,
+        totalSpent,
+        spendCount,
+        remaining,
+        balance,
+        terminated,
+        terminatedAt,
+      ] = data;
+      setState({
+        owner,
+        agent,
+        policy,
+        totalSpent,
+        spendCount,
+        remaining,
+        balance,
+        terminated,
+        terminatedAt,
+      });
       setError("");
     } catch (e: any) {
       setError(describeError(e));
@@ -953,28 +975,49 @@ function VaultTab({ account }: { account: string }) {
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-slate-900">Agent vault</h2>
-          {myVault && (
-            <button
-              onClick={() => {
-                useVault("");
-                setState(null);
-              }}
-              className="text-[11px] px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-medium hover:bg-blue-200 transition-colors"
-              title="Back to the demo vault"
-            >
-              showing your vault · view demo
-            </button>
-          )}
-          {state.policy.paused ? (
-            <span className="text-xs px-2 py-1 rounded-full bg-rose-100 text-rose-700 font-medium">
-              paused
-            </span>
-          ) : (
-            <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">
-              live
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {myVault && (
+              <button
+                onClick={() => {
+                  useVault("");
+                  setState(null);
+                }}
+                className="text-[11px] px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-medium hover:bg-blue-200 transition-colors"
+                title="Back to the demo vault"
+              >
+                showing your vault · view demo
+              </button>
+            )}
+            {state.terminated ? (
+              <span className="text-xs px-2 py-1 rounded-full bg-slate-200 text-slate-600 font-medium">
+                closed
+              </span>
+            ) : state.policy.paused ? (
+              <span className="text-xs px-2 py-1 rounded-full bg-rose-100 text-rose-700 font-medium">
+                paused
+              </span>
+            ) : (
+              <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+                live
+              </span>
+            )}
+          </div>
         </div>
+
+        {state.terminated && (
+          <div className="mt-4 rounded-lg border border-slate-300 bg-slate-50 p-3.5 text-xs text-slate-600">
+            <p className="font-semibold text-slate-800 mb-0.5">
+              Engagement closed
+            </p>
+            <p className="leading-relaxed">
+              The owner ended this vault and withdrew everything that remained.
+              It spent {fmt(state.totalSpent)} USDC across{" "}
+              {Number(state.spendCount)} payment
+              {Number(state.spendCount) === 1 ? "" : "s"}. The record stays
+              readable — the budget is just gone.
+            </p>
+          </div>
+        )}
 
         <div className="mt-5 grid grid-cols-2 gap-4">
           <Stat label="Balance" value={`${fmt(state.balance)} USDC`} />
@@ -1062,14 +1105,16 @@ function VaultTab({ account }: { account: string }) {
         )}
 
         <div className="mt-6 flex flex-wrap gap-2">
-          <button
-            onClick={() => setFundOpen(true)}
-            disabled={loading || !amOwner}
-            title={amOwner ? "" : "Only the vault owner can fund it"}
-            className="text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-          >
-            Fund vault
-          </button>
+          {!state.terminated && (
+            <button
+              onClick={() => setFundOpen(true)}
+              disabled={loading || !amOwner}
+              title={amOwner ? "" : "Only the vault owner can fund it"}
+              className="text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            >
+              Fund vault
+            </button>
+          )}
           <button
             onClick={() => run("withdrawAll", "Withdrawn to owner")}
             disabled={loading || !amOwner}
@@ -1086,6 +1131,24 @@ function VaultTab({ account }: { account: string }) {
           >
             {state.policy.paused ? "Unpause" : "Pause agent"}
           </button>
+          {!state.terminated && (
+            <button
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "Close this vault?\n\nEverything still in it is paid back to you, the agent can no longer spend, and it cannot be funded again. This is permanent.",
+                  )
+                )
+                  return;
+                run("terminate", "Vault closed — balance returned to you");
+              }}
+              disabled={loading || !amOwner}
+              title={amOwner ? "" : "Only the vault owner can close it"}
+              className="text-sm font-medium px-3 py-1.5 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50 disabled:opacity-50 transition-colors"
+            >
+              Close vault
+            </button>
+          )}
         </div>
       </div>
 

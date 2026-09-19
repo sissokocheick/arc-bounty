@@ -40,6 +40,9 @@ export const AGENTLY_ABI = [
   "function setAgent(address _agent)",
   "function setPaused(bool _paused)",
   "function spend(address to, uint256 amount, string reason)",
+  "function terminate()",
+  "function terminated() view returns (bool)",
+  "function terminatedAt() view returns (uint256)",
   "function dailyRemaining() view returns (uint256)",
   "function owner() view returns (address)",
   "function agent() view returns (address)",
@@ -242,6 +245,12 @@ const KNOWN_ERRORS: {
     params: "",
     explain: () =>
       "The vault is paused. Spending is frozen until the owner resumes it.",
+  },
+  {
+    sig: "VaultTerminated()",
+    params: "",
+    explain: () =>
+      "This vault is closed. The owner already ended the engagement and withdrew everything, so it can neither spend nor be funded again.",
   },
   {
     sig: "ZeroAddress()",

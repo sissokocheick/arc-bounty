@@ -8,6 +8,11 @@ pragma solidity ^0.8.20;
 ///         prompt-injected shopping spree. This vault makes that safe:
 ///         spending is bounded by an owner-defined policy.
 ///
+///         A vault is not immortal: `terminate()` pays the owner everything
+///         that remains and freezes the vault for good. After it, the agent
+///         can neither spend nor be funded again — an engagement ends, and the
+///         chain reflects that instead of holding a live budget open forever.
+///
 ///         All amounts are native USDC in 18 decimals.
 contract AgentVault {
     struct Policy {
@@ -32,6 +37,11 @@ contract AgentVault {
     uint256 public totalSpent;
     uint256 public spendCount;
 
+    // Terminal state. Set once, in terminate(), and never cleared: a vault that
+    // could be revived would let a "closed" engagement start spending again.
+    bool public terminated;
+    uint256 public terminatedAt;
+
     event Funded(address indexed by, uint256 amount, uint256 balance);
     event Spent(uint256 indexed index, address indexed to, uint256 amount, string reason);
     event Withdrawn(address indexed to, uint256 amount);
@@ -39,10 +49,12 @@ contract AgentVault {
     event WhitelistSet(address indexed who, bool allowed);
     event AgentSet(address indexed agent);
     event Paused(bool paused);
+    event Terminated(address indexed by, uint256 paidOut, uint256 totalSpent);
 
     error OnlyOwner();
     error OnlyAgent();
     error VaultPaused();
+    error VaultTerminated();
     error ZeroAddress();
     error ExceedsPerSpendCap(uint256 cap);
     error ExceedsDailyBudget(uint256 remaining);
@@ -72,6 +84,7 @@ contract AgentVault {
     /// @param amount   native USDC (18 decimals)
     /// @param reason   machine-readable purpose, recorded on-chain for audit
     function spend(address to, uint256 amount, string calldata reason) external onlyAgent {
+        if (terminated) revert VaultTerminated();
         if (policy.paused) revert VaultPaused();
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert InsufficientBalance(0);
@@ -126,6 +139,7 @@ contract AgentVault {
     // ------------------------------------------------------------- owner ops
 
     function fund() external payable onlyOwner {
+        if (terminated) revert VaultTerminated();
         emit Funded(msg.sender, msg.value, address(this).balance);
     }
 
@@ -166,7 +180,31 @@ contract AgentVault {
         emit Paused(_paused);
     }
 
+    /// @notice Close the engagement. Pays the owner everything that remains and
+    ///         freezes the vault permanently — the agent can neither spend nor
+    ///         be funded again. The audit trail (totalSpent, spendCount) stays
+    ///         readable, so a terminated vault is still proof of what the agent
+    ///         did, just no longer a live budget.
+    function terminate() external onlyOwner {
+        if (terminated) revert VaultTerminated();
+        uint256 payout = address(this).balance;
+
+        // Effects before the interaction: mark it closed first, so a call that
+        // re-enters finds a vault that has already ended.
+        terminated = true;
+        terminatedAt = block.timestamp;
+        emit Terminated(msg.sender, payout, totalSpent);
+
+        if (payout > 0) {
+            (bool ok, ) = owner.call{value: payout}("");
+            if (!ok) revert InsufficientBalance(payout);
+        }
+    }
+
     receive() external payable {
+        // A terminated vault must not accept funds again — it would silently
+        // trap them, since spend and fund both revert afterwards.
+        if (terminated) revert VaultTerminated();
         // anyone can tip/fund the vault; owner-only withdrawal protects it
         emit Funded(msg.sender, msg.value, address(this).balance);
     }
