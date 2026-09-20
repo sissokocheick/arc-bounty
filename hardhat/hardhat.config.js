@@ -22,6 +22,22 @@ const rawKey = process.env.PRIVATE_KEY || dot('PRIVATE_KEY', '.env');
 const PRIVATE_KEY = /^0x[0-9a-fA-F]{64}$/.test(rawKey || '') ? rawKey : undefined;
 const ARC_RPC_URL = process.env.ARC_RPC_URL || dot('NEXT_PUBLIC_ARC_RPC_URL', '../.env.local');
 
+// The agent's own key — generated locally by seed-mainnet.mjs and never shared.
+// The loop must sign with this, never PRIVATE_KEY: PRIVATE_KEY is the deployer
+// whose key was exposed, and the registry's reputation is keyed to this
+// address. signer[0] stays the deployer for scripts that need an owner;
+// signer[1] is the agent, which is what the autonomous loop uses.
+const rawAgentKey = process.env.AGENT_PRIVATE_KEY || dot('AGENT_PRIVATE_KEY', '.env');
+const AGENT_KEY = /^0x[0-9a-fA-F]{64}$/.test(rawAgentKey || '') ? rawAgentKey : undefined;
+
+// The contract addresses live in the frontend's .env.local so they are
+// configured in exactly one place. Scripts read them from process.env, so
+// surface them there — nothing above would work otherwise.
+for (const k of ['NEXT_PUBLIC_TASK_BOARD_ADDRESS', 'NEXT_PUBLIC_AGENT_REGISTRY_ADDRESS', 'NEXT_PUBLIC_AGENT_VAULT_ADDRESS', 'NEXT_PUBLIC_ARC_RPC_URL']) {
+  const v = dot(k, '../.env.local');
+  if (v && !process.env[k]) process.env[k] = v;
+}
+
 /** @type import('hardhat/config').HardhatUserConfig */
 export default {
   plugins: [hardhatToolbox],
@@ -43,7 +59,13 @@ export default {
       type: 'http',
       chainId: 5042,
       url: ARC_RPC_URL || 'https://rpc.mainnet.arc.io',
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+      // signer[0] = deployer/owner, signer[1] = agent. agent.mjs uses [1]
+      // explicitly, so a missing AGENT_PRIVATE_KEY fails loudly rather than
+      // silently falling back to the deployer key.
+      accounts: [
+        ...(PRIVATE_KEY ? [PRIVATE_KEY] : []),
+        ...(AGENT_KEY ? [AGENT_KEY] : []),
+      ],
     },
     // Arc testnet — free USDC from https://faucet.circle.com
     arcTestnet: {

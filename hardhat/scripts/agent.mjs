@@ -40,21 +40,37 @@ async function main() {
     process.exit(1);
   }
 
-  const [me] = await ethers.getSigners();
+  // Resolve this loop's signer by looking the handle up in the registry, not
+  // by a hardcoded index into getSigners(). Signer order differs per network —
+  // on localhost ARC-1 is workerA (index 2), on mainnet it is the agent key
+  // (index 1). Indexing by position would silently pick the poster, the
+  // deployer, or whoever else happens to sit there. Whatever key this resolves
+  // to is the one whose reputation the payouts will land on, so it must be the
+  // key that was actually registered as this handle.
+  const signers = await ethers.getSigners();
+  const reg0 = await ethers.getContractAt("AgentRegistry", REGISTRY);
+  let me;
+  for (const s of signers) {
+    try {
+      const a = await reg0.connect(s).getAgent(s.address);
+      if (a.registered && a.handle === HANDLE) { me = s; break; }
+    } catch { /* not this signer's registry, keep looking */ }
+  }
+  if (!me) {
+    console.error(
+      `No signer is registered as "${HANDLE}". Register it first, or set` +
+      " AGENT_PRIVATE_KEY in hardhat/.env. Refusing to fall back to another" +
+      " key — the loop would submit work under the wrong identity."
+    );
+    process.exit(1);
+  }
   const board = (await ethers.getContractAt("TaskBoard", BOARD)).connect(me);
   const registry = (await ethers.getContractAt("AgentRegistry", REGISTRY)).connect(me);
 
   let agent;
-  try {
-    agent = await registry.getAgent(me.address);
-  } catch {
-    agent = null;
-  }
-  if (!agent?.registered) {
-    console.log(`[${HANDLE}] registering as a worker…`);
-    await registry.register(HANDLE, CAPS.join(","), "ipfs://agent-meta", ethers.ZeroAddress);
-    agent = await registry.getAgent(me.address);
-  }
+  // The loop can only start once this handle is registered — resolution above
+  // already proved it, so re-reading here is enough to capture the profile.
+  agent = await registry.getAgent(me.address);
 
   const balance0 = await ethers.provider.getBalance(me.address);
   console.log(`[${HANDLE}] online · wallet ${me.address}`);
