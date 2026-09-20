@@ -91,6 +91,29 @@ export function getReadContract(address: string, provider: ethers.JsonRpcProvide
 }
 
 /**
+ * Pre-flight check for a payable call. A wallet that cannot cover `value`
+ * fails with a shapeless "missing revert data" at estimate time — the transfer
+ * is rejected before the contract's code runs, so there is no selector to
+ * decode and no error code to key on. Catching it here turns a mystery into a
+ * one-sentence answer the user can act on.
+ *
+ * Returns null when the wallet can pay, or the shortfall in wei otherwise.
+ */
+export async function shortfallOf(
+  address: string,
+  value: bigint
+): Promise<bigint | null> {
+  try {
+    const balance = await readWithRetry((p) => p.getBalance(address));
+    return balance >= value ? null : value - balance;
+  } catch {
+    // The RPC is unreachable — do not block the write on a read that failed.
+    // The wallet itself will report the problem, and describeError handles it.
+    return null;
+  }
+}
+
+/**
  * Arc's public RPC drops roughly 1 call in 20 at random — no revert data, no
  * rate-limit code, just a transient node error that succeeds on retry. Without
  * a retry every dashboard read can fail on a single bad draw and leave a tab
@@ -368,12 +391,22 @@ export function describeError(e: unknown): string {
   }
 
   // A revert with no data at all reaches some wallets as the literal string
-  // "missing revert data" rather than a "0x" field. It means the call hit a
-  // selector the deployed contract does not implement — the contract cannot
-  // name its own complaint because the code path never existed.
+  // "missing revert data" rather than a "0x" field. It has two causes that
+  // sound alike from here but ask for opposite responses:
+  //
+  //  (1) The call hit a selector the deployed contract does not implement.
+  //  (2) The call is payable and the signer cannot cover msg.value — the node
+  //      rejects the transfer before the contract's code even runs, so the
+  //      revert carries no data even though the contract is perfectly fine.
+  //
+  // These are not separable from the error object alone: case (2) arrives with
+  // the same shapeless message and no error code. The caller that knows it is
+  // sending value should check the balance up front (see canCoverValue) and
+  // report (2) itself, so this fallback is deliberately conservative — it
+  // suggests the version mismatch only as a possibility, never as a certainty.
   const msg = (err?.shortMessage ?? err?.message ?? "") as string;
   if (/missing revert data/i.test(msg)) {
-    return "This contract's deployed code does not implement that function, so the call reverted with no reason given. The action is not supported by this version of the contract.";
+    return "The call was rejected with no reason given. This usually means either the wallet cannot cover this payment, or the deployed contract predates this feature. Check your USDC balance first — gas on Arc is paid in native USDC.";
   }
 
   // A real revert: find the first candidate that decodes to a known selector.

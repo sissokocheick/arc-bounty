@@ -17,6 +17,7 @@ import {
   getReceiptAny,
   readWithRetry,
   short,
+  shortfallOf,
 } from "@/utils/contract";
 import { AGENT_VAULT_BYTECODE } from "@/utils/vault-bytecode";
 
@@ -195,6 +196,22 @@ export default function Home() {
       return;
     }
     const signer = await getSigner();
+    // Check the balance before the wallet estimates gas: an uncovered payable
+    // fails with a bare "missing revert data" that says nothing about money,
+    // and the user is left blaming a contract that did nothing wrong.
+    const short = await shortfallOf(await signer.getAddress(), value);
+    if (short !== null) {
+      toast.push({
+        kind: "error",
+        title: "Not enough USDC in this wallet",
+        body: `This task needs ${fmt(
+          value
+        )} USDC escrowed, but the wallet is short by ${fmt(
+          short
+        )}. Gas on Arc is paid in native USDC — top it up and retry.`,
+      });
+      return;
+    }
     const c = new ethers.Contract(BOARD, AGENTLY_ABI, signer);
     const days = Math.min(90, Math.max(0, Number(form.get("days") || 0)));
     const deadline = days
@@ -920,6 +937,22 @@ function VaultTab({ account }: { account: string }) {
         );
       const provider = new ethers.BrowserProvider(walletProvider);
       const s = await provider.getSigner();
+      // Same reason as the task form: an uncovered payable reports itself as
+      // "missing revert data", which reveals nothing about money.
+      const value = args[0]?.value;
+      if (value) {
+        const short = await shortfallOf(await s.getAddress(), BigInt(value));
+        if (short !== null) {
+          toast.push({
+            kind: "error",
+            title: "Not enough USDC in this wallet",
+            body: `You are ${fmt(
+              short
+            )} USDC short. Gas on Arc is paid in native USDC — top the wallet up and retry.`,
+          });
+          return;
+        }
+      }
       const c = new ethers.Contract(vault, AGENTLY_ABI, s);
       const t = await c[fn](...args);
       // Confirm on the public RPCs — same reason as tx(): the wallet's own
